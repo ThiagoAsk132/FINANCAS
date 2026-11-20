@@ -146,13 +146,15 @@ function resumo(m) {
 // Previsto = média das compras de mercado (categoria Mercado, qualquer forma, pela data da compra) nos últimos
 // 3 meses já fechados que têm compra. "Já compramos" = compras de mercado com data no mês.
 // Se o mercado ainda está como conta fixa naquele mês, não tem envelope (a fixa já desconta).
+const MERC_DESDE = "2026-12";
 const ehMerc = c => (c || "") === "Mercado";
 function mercadoGasto(m) { return todos("gasto").filter(g => ehMerc(g.cat) && g.data && mesDe(g.data) === m).reduce((s, g) => s + (g.valor || 0), 0); }
 function mercadoMes(m) {
   if (todos("fixa").some(f => ehMerc(f.cat) && ativo(f, m))) return null;
   const base = m < mesAtual() ? m : mesAtual(), meses = [];
-  for (let i = 1; i <= 12 && meses.length < 3; i++) { const k = addMes(base, -i), v = mercadoGasto(k); if (v > 0) meses.push({ k, v }); }
-  if (!meses.length) return null;
+  // só conta a partir de dez/2026 (antes o mercado não era todo registrado) e só liga com 3 meses completos
+  for (let i = 1; i <= 12 && meses.length < 3; i++) { const k = addMes(base, -i); if (k < MERC_DESDE) break; const v = mercadoGasto(k); if (v > 0) meses.push({ k, v }); }
+  if (meses.length < 3) return null;
   const prev = Math.round(meses.reduce((s, x) => s + x.v, 0) / meses.length), gasto = mercadoGasto(m);
   return { prev, gasto, falta: m < mesAtual() ? 0 : Math.max(0, prev - gasto), meses };
 }
@@ -751,7 +753,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 22 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 23 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
