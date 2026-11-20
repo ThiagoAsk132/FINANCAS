@@ -138,7 +138,23 @@ function resumo(m) {
   const meta = metaDe(ent);
   // a meta NÃO sai do "pode gastar": só o que foi guardado de fato no mês (Mês › Guardar) é descontado
   const g = reg["gd|" + m], guard = vivo(g) ? (g.valor || 0) : 0;
-  return { its, ents, ent, pixFix, pixVar, fat, meta, guard, livre: ent - pixFix - pixVar - fat - guard };
+  // mercado: o que ainda falta comprar no mês (média dos últimos meses − o já comprado) fica reservado
+  const merc = mercadoMes(m), reservaMerc = merc ? merc.falta : 0;
+  return { its, ents, ent, pixFix, pixVar, fat, meta, guard, merc, reservaMerc, livre: ent - pixFix - pixVar - fat - guard - reservaMerc };
+}
+// ---------- envelope do mercado ----------
+// Previsto = média das compras de mercado (categoria Mercado, qualquer forma, pela data da compra) nos últimos
+// 3 meses já fechados que têm compra. "Já compramos" = compras de mercado com data no mês.
+// Se o mercado ainda está como conta fixa naquele mês, não tem envelope (a fixa já desconta).
+const ehMerc = c => (c || "") === "Mercado";
+function mercadoGasto(m) { return todos("gasto").filter(g => ehMerc(g.cat) && g.data && mesDe(g.data) === m).reduce((s, g) => s + (g.valor || 0), 0); }
+function mercadoMes(m) {
+  if (todos("fixa").some(f => ehMerc(f.cat) && ativo(f, m))) return null;
+  const base = m < mesAtual() ? m : mesAtual(), meses = [];
+  for (let i = 1; i <= 12 && meses.length < 3; i++) { const k = addMes(base, -i), v = mercadoGasto(k); if (v > 0) meses.push({ k, v }); }
+  if (!meses.length) return null;
+  const prev = Math.round(meses.reduce((s, x) => s + x.v, 0) / meses.length), gasto = mercadoGasto(m);
+  return { prev, gasto, falta: m < mesAtual() ? 0 : Math.max(0, prev - gasto), meses };
 }
 // média mensal dos gastos variáveis (não fixos) nos últimos 3 meses fechados que têm lançamentos
 function mediaVariavel(m0) {
@@ -260,9 +276,10 @@ function telaInicio() {
   h += `<section class="simples num">
     <div class="srow"><span class="sic">💵</span><div class="st"><b>Entrou</b><small>salários e outras entradas</small></div><b class="sv pos">${R0(r.ent)}</b></div>
     <div class="srow"><span class="sic">🛒</span><div class="st"><b>Gastamos</b><small>contas, cartão e compras do mês</small></div><b class="sv">${R0(sai)}</b></div>
+    ${r.merc ? `<div class="srow"><span class="sic">🧺</span><div class="st"><b>${r.merc.falta ? "Mercado que ainda vamos comprar" : "Mercado do mês"}</b><small>média ${R0(r.merc.prev)} · já compramos ${R0(r.merc.gasto)}${r.merc.gasto > r.merc.prev ? ` · <span style="color:var(--danger);font-weight:600">passou ${R0(r.merc.gasto - r.merc.prev)} da média</span>` : ""}</small></div><b class="sv">${r.merc.falta ? R0(r.merc.falta) : "✓"}</b></div>` : ""}
     ${r.guard ? `<div class="srow"><span class="sic">🐷</span><div class="st"><b>Guardamos</b><small>já separado este mês</small></div><b class="sv pos">${R0(r.guard)}</b></div>` : ""}
     <div class="gbar" aria-hidden="true"><span style="width:${pg}%" class="${sai > r.ent ? "over" : ""}"></span></div>
-    <span class="small muted">${sai > r.ent ? "Os gastos passaram do que entrou." : `Já foi ${pg}% do que entrou.`}</span>
+    <span class="small muted">${sai > r.ent ? "Os gastos passaram do que entrou." : `Já foi ${pg}% do que entrou.`}${r.reservaMerc ? " O mercado que ainda falta comprar já está descontado abaixo." : ""}</span>
     <div class="sobra ${sobra < 0 ? "neg" : ""}"><span>${sobra < 0 ? "Gastamos a mais" : "Ainda dá para gastar ou guardar"}</span><b>${sobra < 0 ? "−" : ""}${R0(Math.abs(sobra))}</b>`;
   const ehAtual = m === mesAtual(), restam = ehAtual ? diasNoMes(m) - +hojeISO().slice(8, 10) + 1 : 0;
   if (ehAtual && sobra > 0) h += `<small>uns ${R0(Math.floor(sobra / restam))} por dia nos ${restam} dias que faltam</small>`;
@@ -534,6 +551,7 @@ function telaGraficos() {
     { rot: "Faturas do cartão", v: r.fat, cor: "var(--cred)" },
     { rot: "Débito e Pix avulsos", v: r.pixVar, cor: "var(--warn)" },
     { rot: "Guardado", v: r.guard, cor: "var(--save)" },
+    { rot: "Mercado ainda a comprar", v: r.reservaMerc, cor: "var(--c4)" },
     { rot: "Livre para gastar", v: Math.max(r.livre, 0), cor: "var(--free)" }
   ], "Renda", r.ent)}
   ${falta ? `<span class="small" style="color:var(--danger);font-weight:600">Faltam ${R(falta)} para fechar o mês.</span>` : ""}</div></section>`;
@@ -560,7 +578,7 @@ function telaGraficos() {
   for (let i = 0; i < 6; i++) {
     const k = addMes(m, i), x = resumo(k);
     ms.push({ rot: curtoMes(k).slice(0, 3), ref: x.ent, nota: mil(x.livre), notaCor: x.livre < 0 ? "var(--danger)" : "var(--save)",
-      partes: [{ rot: "Contas Pix", v: x.pixFix + x.pixVar, cor: "var(--pix)" }, { rot: "Cartão", v: x.fat, cor: "var(--cred)" }, { rot: "Guardado", v: x.guard, cor: "var(--save)" }] });
+      partes: [{ rot: "Contas Pix", v: x.pixFix + x.pixVar, cor: "var(--pix)" }, { rot: "Cartão", v: x.fat, cor: "var(--cred)" }, { rot: "Guardado", v: x.guard, cor: "var(--save)" }, { rot: "Mercado previsto", v: x.reservaMerc, cor: "var(--c4)" }] });
   }
   h += `<section><h2>Próximos 6 meses</h2><div class="card">${barras(ms, [{ rot: "Contas Pix", cor: "var(--pix)" }, { rot: "Cartão", cor: "var(--cred)" }, { rot: "Guardado", cor: "var(--save)" }, { rot: "Renda", cor: "var(--fg)", tracejado: true }])}
     <span class="small muted">A linha tracejada é a renda. O número embaixo de cada mês é quanto sobra livre (em reais). Barra acima da linha = mês no vermelho.</span></div></section>`;
@@ -673,7 +691,7 @@ function telaPlanejar() {
     const k = addMes(m0, i), r = resumo(k);
     h += `<tr><td>${curtoMes(k)}</td><td>${R(r.ent)}</td><td>${R(r.pixFix + r.pixVar + r.fat)}</td><td>${R(r.guard)}</td><td class="${r.livre < 0 ? "neg" : "posv"}">${R(r.livre)}</td></tr>`;
   }
-  h += `</tbody></table></div><span class="small muted">"Já sai" = contas fixas + faturas com parcelas e compras já lançadas. Antes de parcelar algo, olhe se os próximos meses aguentam.</span></div></section>`;
+  h += `</tbody></table></div><span class="small muted">"Já sai" = contas fixas + faturas com parcelas e compras já lançadas. "Livre" já desconta o mercado pela média dos últimos meses. Antes de parcelar algo, olhe se os próximos meses aguentam.</span></div></section>`;
 
   // reserva
   const custoVida = fixasTot + (mv ? mv.media : 0), alvo = custoVida * 6, tem = guardadoTotal();
@@ -733,7 +751,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 21 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 22 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
