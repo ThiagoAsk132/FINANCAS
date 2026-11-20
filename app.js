@@ -562,7 +562,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 14 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 15 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
@@ -647,15 +647,18 @@ const exigir = (v, campos) => {
 const sugestoes = tipo => [...new Set(todos(tipo).map(x => x.desc))].slice(0, 40);
 
 // lançamento do dia a dia (gasto ou entrada avulsa)
-function formLancamento(rec) {
-  const novo = !rec, g = rec || {};
+// pre = dados lidos de um comprovante (lançamento novo já preenchido)
+function formLancamento(rec, pre) {
+  const novo = !rec, g = rec || pre || {};
   const cs = opsCartao();
   const tipoIni = g.tipo === "entrada" ? "entrada" : "gasto";
   abrir({
-    titulo: novo ? "Novo lançamento" : (tipoIni === "entrada" ? "Entrada avulsa" : "Gasto"), novo, foco: "desc",
+    titulo: pre ? "Comprovante lido" : novo ? "Novo lançamento" : (tipoIni === "entrada" ? "Entrada avulsa" : "Gasto"), novo, foco: "desc",
+    extra: novo && !pre ? { t: "📷 Comprovante", fn: escolherComprovante } : null,
     campos: [
       ...(novo ? [{ n: "tipo", tipo: "seg", v: "gasto", ops: [{ v: "gasto", t: "Gasto" }, { v: "entrada", t: "Entrada extra" }] }] : [{ n: "tipo", tipo: "seg", v: tipoIni, ops: [{ v: tipoIni, t: tipoIni === "gasto" ? "Gasto" : "Entrada extra" }] }]),
-      { n: "desc", rot: "Descrição", tipo: "texto", v: g.desc, ph: "Ex.: Mercado, gasolina, farmácia", lista: sugestoes("gasto") },
+      { n: "desc", rot: pre ? "O que foi comprado" : "Descrição", tipo: "texto", v: pre ? "" : g.desc, ph: pre && pre.quem ? "Ex.: faxina, remédio, presente" : "Ex.: Mercado, gasolina, farmácia", lista: sugestoes("gasto"),
+        dica: pre ? () => pre.aviso : null },
       { n: "valor", rot: "Valor total", tipo: "valor", v: g.valor },
       { n: "data", rot: "Data", tipo: "data", v: g.data || hojeISO() },
       { n: "forma", rot: "Pago com", tipo: "seg", v: g.forma || (cs.length ? "credito" : "pix"), ops: [{ v: "pix", t: "Pix" }, { v: "debito", t: "Débito" }, { v: "credito", t: "Crédito" }], se: v => v.tipo === "gasto" },
@@ -671,9 +674,14 @@ function formLancamento(rec) {
       { n: "pessoa", rot: "Quem", tipo: "seg", v: g.pessoa || eu(), ops: opsPessoa() }
     ],
     salvar(v) {
+      if (pre && pre.quem && !v.desc.trim()) v.desc = pre.quem;
       const e = exigir(v, ["desc", "valor"]); if (e) return e;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(v.data)) return "Informe a data.";
-      const base = { id: g.id || novoId(v.tipo === "entrada" ? "e" : "g"), tipo: v.tipo, desc: v.desc.trim(), valor: centavos(v.valor), data: v.data, pessoa: v.pessoa };
+      let desc = v.desc.trim();
+      if (pre && pre.quem && !desc.toLowerCase().includes(pre.quem.toLowerCase())) desc += " (" + pre.quem + ")";
+      const base = { id: g.id || novoId(v.tipo === "entrada" ? "e" : "g"), tipo: v.tipo, desc, valor: centavos(v.valor), data: v.data, pessoa: v.pessoa };
+      if (g.conta && v.forma !== "credito") base.conta = g.conta;
+      if (pre) base.origem = "comprovante";
       if (v.tipo === "gasto") {
         Object.assign(base, { forma: v.forma, cat: v.cat });
         if (v.forma === "credito") {
@@ -689,6 +697,60 @@ function formLancamento(rec) {
     excluir: novo ? null : () => { apagar(g.id); toast("Lançamento excluído."); }
   });
 }
+
+// ---------- comprovante (foto/print ou PDF) ----------
+function escolherComprovante() {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*,application/pdf";
+  inp.onchange = () => inp.files[0] && processarComprovante(inp.files[0]);
+  inp.click();
+}
+const PALAVRAS_CAT = [[/ifood|99 ?food|rappi|aiqfome/i, "Delivery"], [/posto|combust|auto ?posto|shell|ipiranga|uber|99 ?pop|estaciona|park/i, "Transporte"],
+  [/farmac|drogar|droga|raia|panvel|clinica|medic|odonto|psicolog/i, "Saúde"], [/mercad|supermerc|atacad|padaria|pao|acougue|hortifruti/i, "Mercado"],
+  [/restaurante|lanch|pizz|cantina|bar\b|cafe|sorvet|hamburg/i, "Restaurante"], [/copel|sanepar|tim\b|vivo|claro|oi\b|internet|faxin/i, "Contas da casa"],
+  [/pet|veterin|ra[çc][aã]o/i, "Pets"], [/escola|faculd|curso|unipar|unimeo|senac/i, "Educação"], [/netflix|spotify|amazon prime|disney|youtube|chatgpt|openai/i, "Assinaturas"]];
+function catPalpite(quem) {
+  if (!quem) return "";
+  const q = quem.toLowerCase().split(" ").filter(w => w.length > 2).slice(0, 2).join(" ");
+  if (q) { const ant = todos("gasto").filter(x => x.cat && (x.desc || "").toLowerCase().includes(q)).sort((a, b) => (b.upd || 0) - (a.upd || 0))[0]; if (ant) return ant.cat; }
+  for (const [re, c] of PALAVRAS_CAT) if (re.test(quem.normalize("NFD").replace(/[̀-ͯ]/g, ""))) return c;
+  return "";
+}
+async function processarComprovante(arq) {
+  if (!window.COMPROVANTE) { toast("O leitor de comprovante não carregou. Abra o app com internet."); return; }
+  toast("Lendo o comprovante…");
+  let r;
+  try { r = await window.COMPROVANTE.ler(arq, p => toast("Lendo o comprovante… " + p + "%")); }
+  catch (err) { toast("Não consegui ler: " + err.message + ". Lance à mão."); formLancamento(null); return; }
+  const quem = eu(), cs = todos("cartao");
+  // cartão: o do banco do comprovante, de quem está usando o aparelho
+  const nomeQuem = nomeP(quem).toLowerCase();
+  const doBanco = cs.filter(k => r.banco && k.nome.toUpperCase().includes(r.banco.split(" ")[0]));
+  const cartao = (doBanco.find(k => k.nome.toLowerCase().includes(nomeQuem)) || doBanco[0] || cs[0] || {}).id;
+  const pre = { tipo: "gasto", valor: r.valor || null, data: r.data || hojeISO(), forma: r.forma, cartao, parc: 1, pessoa: quem,
+    cat: catPalpite(r.quem) || "Outros", quem: r.quem, conta: r.banco && r.forma !== "credito" ? r.banco + " " + nomeP(quem).toUpperCase() : "" };
+  const lidos = [r.valor ? "valor " + R(r.valor) : "", r.data ? "data " + dataBR(r.data) : "", FORMAS[r.forma], r.quem ? "para <b>" + esc(r.quem) + "</b>" : "", r.banco ? esc(r.banco) : ""].filter(Boolean);
+  const faltou = [!r.valor && "valor", !r.data && "data"].filter(Boolean);
+  const igual = r.valor && r.data && todos("gasto").find(x => x.valor === r.valor && x.data === r.data);
+  pre.aviso = "Li no comprovante: " + (lidos.join(" · ") || "quase nada") + ". Confira antes de salvar." +
+    (faltou.length ? ` <b>Não achei ${faltou.join(" e ")}</b>: preencha à mão.` : "") +
+    (r.quem ? " O nome de quem recebeu vai junto na descrição." : "") +
+    (igual ? ` <b style="color:var(--danger)">Atenção: já existe "${esc(igual.desc)}" com o mesmo valor e data.</b>` : "");
+  formLancamento(null, pre);
+}
+// comprovante compartilhado direto do app do banco (Android): o service worker guarda o arquivo e abre ?comprovante=1
+async function comprovanteCompartilhado() {
+  if (!/[?&]comprovante=1/.test(location.search) || !("caches" in window)) return;
+  const q = new URLSearchParams(location.search); q.delete("comprovante");
+  history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : ""));
+  try {
+    const c = await caches.open("comprovante-recebido"), resp = await c.match("ultimo-comprovante");
+    if (!resp) return;
+    const blob = await resp.blob(); await c.delete("ultimo-comprovante");
+    processarComprovante(new File([blob], decodeURIComponent(resp.headers.get("x-nome") || "comprovante"), { type: blob.type }));
+  } catch (err) { toast("Não consegui abrir o comprovante compartilhado."); }
+}
+setTimeout(comprovanteCompartilhado, 300);
 
 function formFixa(rec, formaIni) {
   const novo = !rec, f = rec || {}, cs = opsCartao(), mDef = novo ? mesSel : (mesSel > (f.ini || "") ? mesSel : f.ini);
