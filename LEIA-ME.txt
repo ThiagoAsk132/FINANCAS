@@ -1,0 +1,32 @@
+APP "FINANÇAS DA CASA" — iPhone e computador, pelo navegador (mesma base do app ACAVES)
+Criado em 19/11/2026. Endereço previsto: https://thiagoask132.github.io/FINANCAS/
+
+O QUE FAZ
+- Mês: quanto ainda pode gastar no mês (renda − fixas Pix − faturas do cartão − meta de guardar),
+  valor por dia, quanto do mês que vem já está comprometido, contas Pix com "paga", faturas por cartão
+  (com parcelas), gastos por categoria e quanto guardaram de fato.
+- Gráficos (desde 19/11/2026): rosca da renda (contas, cartão, guardar, livre), rosca por categoria,
+  barras dos próximos 6 meses e das faturas por cartão.
+- Fixas: rendas e contas fixas, separadas em Pix/débito e crédito; reajuste vale "a partir de" um mês.
+- Planejar: estimativa mensal, meta de guardar (% ou valor), regra 60/30/10, próximos 6 meses,
+  reserva de emergência (6× custo de vida), limites por categoria, dicas.
+- Ajustes: quem usa o aparelho, nomes, cartões (fechamento/vencimento), Google Drive, compartilhar, CSV e cópia.
+
+DADOS: Meu Drive\FINANCAS DA CASA\FINANCAS DA CASA.json (nunca vão para o GitHub).
+Sincroniza registro a registro (vale o mais novo); os dois podem lançar ao mesmo tempo.
+
+PUBLICADO EM 19/11/2026
+- GitHub: ThiagoAsk132/FINANCAS (público, só código), GitHub Pages no branch main, raiz.
+- Google Cloud: projeto "Financas Casa" (id symmetric-flow-515323-r8), Drive API ativada,
+  tela de login "Financas da Casa" Externo/Testando, cliente web "Financas da Casa web"
+  (origem https://thiagoask132.github.io · retorno https://thiagoask132.github.io/FINANCAS/). ID em config.js.
+- Usuários de teste: thiago2019aschidamini@gmail.com e carolinetoigomarcon@gmail.com
+  (Google Auth Platform > Público-alvo > Add users; quem não estiver lá não consegue entrar).
+- Escopo: drive (precisa para enxergar o arquivo compartilhado). Aviso "app não verificado" é normal em Teste.
+
+PRIMEIRO USO NO iPHONE
+Safari > endereço > Compartilhar > Adicionar à Tela de Início > abrir pelo ícone > Ajustes > Entrar com Google >
+Criar arquivo da casa > Ajustes > Compartilhar com o e-mail dela. Ela abre o app, entra com a conta dela.
+
+Ao mudar arquivos do app: subir de novo no GitHub, trocar o CACHE em sw.js e o número da versão no rodapé de Ajustes (app.js) (financas-v2...; em 20/11/2026 está em financas-v12).
+Teste sem Google: endereço com ?demo=1.

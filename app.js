@@ -219,7 +219,7 @@ function telaMes() {
   else {
     h += `<div class="big num${r.livre < 0 ? " neg" : ""}">${r.livre < 0 ? "−" : ""}${R(Math.abs(r.livre))}</div>`;
     if (ehAtual && r.livre > 0) h += `<span class="small muted">≈ <b>${R(Math.floor(r.livre / restam))} por dia</b> nos ${restam} dias que faltam</span>`;
-    else if (r.livre < 0) h += `<span class="small muted">As contas, o cartão e a meta de guardar passam da renda do mês.</span>`;
+    else if (r.livre < 0) h += `<span class="small muted">Contas, cartão, débito e Pix (e o que foi guardado) passam da renda do mês.</span>`;
   }
   h += `<div class="tiles num"><div><span>Entra</span><b class="pos">${R0(r.ent)}</b></div><div><span>Sai</span><b>${R0(sai)}</b></div><div><span>Guardado</span><b class="sv">${R0(r.guard)}</b></div></div>`;
   h += `<div class="stack" aria-hidden="true"><span style="width:${w(r.pixFix)};background:var(--pix)"></span><span style="width:${w(r.fat)};background:var(--cred)"></span><span style="width:${w(r.pixVar)};background:var(--warn)"></span><span style="width:${w(r.guard)};background:var(--save)"></span></div>
@@ -563,7 +563,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 11 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 12 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
