@@ -221,7 +221,7 @@ function telaMes() {
   }
   h += `<div class="tiles num"><div><span>Entra</span><b class="pos">${R0(r.ent)}</b></div><div><span>Sai</span><b>${R0(sai)}</b></div><div><span>Guardar</span><b class="sv">${R0(r.meta)}</b></div></div>`;
   h += `<div class="stack" aria-hidden="true"><span style="width:${w(r.pixFix)};background:var(--pix)"></span><span style="width:${w(r.fat)};background:var(--cred)"></span><span style="width:${w(r.pixVar)};background:var(--warn)"></span><span style="width:${w(r.meta)};background:var(--save)"></span></div>
-    <div class="legend num"><span><i style="background:var(--pix)"></i>Contas Pix</span><span><i style="background:var(--cred)"></i>Cartão</span>${r.pixVar ? `<span><i style="background:var(--warn)"></i>Dia a dia</span>` : ""}<span><i style="background:var(--save)"></i>Guardar</span><span><i style="background:var(--free)"></i>Livre</span></div>`;
+    <div class="legend num"><span><i style="background:var(--pix)"></i>Contas Pix</span><span><i style="background:var(--cred)"></i>Cartão</span>${r.pixVar ? `<span><i style="background:var(--warn)"></i>Débito/Pix</span>` : ""}<span><i style="background:var(--save)"></i>Guardar</span><span><i style="background:var(--free)"></i>Livre</span></div>`;
   if (r.ent) h += `<span class="small muted">${pct(sai + r.meta, r.ent)}% da renda já tem destino.</span>`;
   h += `</section>`;
 
@@ -265,11 +265,17 @@ function telaMes() {
   }
   h += `</section>`;
 
-  // ----- gastos do dia a dia (Pix/débito avulsos)
+  // ----- débito e Pix avulsos (do extrato da conta ou lançados à mão), separados por forma
   const varPix = r.its.filter(i => i.forma !== "credito" && i.k === "gasto").sort((a, b) => b.data.localeCompare(a.data));
-  h += `<section><h2>Gastos do dia a dia <small class="num">${R(r.pixVar)}</small></h2>`;
-  if (!varPix.length) h += `<div class="card"><span class="empty">Nada lançado no Pix ou débito. Toque em <b>+ Lançar</b> a cada gasto (mercado, combustível, farmácia…).</span></div>`;
-  else { h += `<div class="card flat"><ul class="list">`; for (const i of varPix) h += li(esc(i.desc), R(i.valor), { act: `data-act="edit" data-id="${i.rec.id}"`, sub: dataBR(i.data) + " · " + esc(i.cat || "") + " · " + FORMAS[i.forma] + " · " + esc(nomeP(i.rec.pessoa)) }); h += `</ul></div>`; }
+  h += `<section><h2>Débito e Pix <small class="num">${R(r.pixVar)}</small></h2>`;
+  if (!varPix.length) h += `<div class="card"><span class="empty">Nada no débito ou Pix avulso. Mande o extrato da conta (OFX) ou toque em <b>+ Lançar</b> a cada gasto.</span></div>`;
+  for (const [forma, titulo] of [["debito", "Cartão de débito"], ["pix", "Pix avulsos"]]) {
+    const its = varPix.filter(i => (i.forma === "debito") === (forma === "debito"));
+    if (!its.length) continue;
+    h += `<details class="card flat dobra"${forma === "debito" ? " open" : ""}><summary><span>${titulo} (${its.length})</span><b class="num">${R(soma(its))}</b></summary><ul class="list">`;
+    for (const i of its) h += li(esc(i.desc), R(i.valor), { act: `data-act="edit" data-id="${i.rec.id}"`, sub: dataBR(i.data) + " · " + esc(i.cat || "") + (i.rec.conta ? " · " + esc(i.rec.conta) : "") + " · " + esc(nomeP(i.rec.pessoa)) });
+    h += `</ul></details>`;
+  }
   h += `</section>`;
 
   // ----- limites (só as categorias com teto)
@@ -362,7 +368,7 @@ function telaGraficos() {
   h += `<section><h2>Para onde vai a renda</h2><div class="card">${rosca([
     { rot: "Contas no Pix", v: r.pixFix, cor: "var(--pix)" },
     { rot: "Faturas do cartão", v: r.fat, cor: "var(--cred)" },
-    { rot: "Gastos do dia a dia", v: r.pixVar, cor: "var(--warn)" },
+    { rot: "Débito e Pix avulsos", v: r.pixVar, cor: "var(--warn)" },
     { rot: "Guardar", v: r.meta, cor: "var(--save)" },
     { rot: "Livre para gastar", v: Math.max(r.livre, 0), cor: "var(--free)" }
   ], "Renda", r.ent)}
@@ -555,7 +561,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 9 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 10 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
