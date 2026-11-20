@@ -562,7 +562,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 15 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 16 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
@@ -732,10 +732,15 @@ async function processarComprovante(arq) {
   const lidos = [r.valor ? "valor " + R(r.valor) : "", r.data ? "data " + dataBR(r.data) : "", FORMAS[r.forma], r.quem ? "para <b>" + esc(r.quem) + "</b>" : "", r.banco ? esc(r.banco) : ""].filter(Boolean);
   const faltou = [!r.valor && "valor", !r.data && "data"].filter(Boolean);
   const igual = r.valor && r.data && todos("gasto").find(x => x.valor === r.valor && x.data === r.data);
+  // mesmo recebedor já lançado perto dessa data (ex.: Pix no crédito, que já está na fatura com juros)
+  const chaveQuem = (r.quem || "").toLowerCase().split(" ").filter(w => w.length > 2).slice(0, 2).join(" ");
+  const dias = d => new Date(d + "T12:00").getTime() / 864e5, dRef = dias(pre.data);
+  const mesmoQuem = !igual && chaveQuem && todos("gasto").find(x => (x.desc || "").toLowerCase().includes(chaveQuem) && Math.abs(dias(x.data) - dRef) <= 75);
   pre.aviso = "Li no comprovante: " + (lidos.join(" · ") || "quase nada") + ". Confira antes de salvar." +
     (faltou.length ? ` <b>Não achei ${faltou.join(" e ")}</b>: preencha à mão.` : "") +
     (r.quem ? " O nome de quem recebeu vai junto na descrição." : "") +
-    (igual ? ` <b style="color:var(--danger)">Atenção: já existe "${esc(igual.desc)}" com o mesmo valor e data.</b>` : "");
+    (igual ? ` <b style="color:var(--danger)">Atenção: já existe "${esc(igual.desc)}" com o mesmo valor e data.</b>` : "") +
+    (mesmoQuem ? ` <b style="color:var(--danger)">Atenção: já existe "${esc(mesmoQuem.desc)}" (${R(mesmoQuem.valor)}, ${FORMAS[mesmoQuem.forma] || ""}). Se for o mesmo pagamento, não salve de novo.</b>` : "");
   formLancamento(null, pre);
 }
 // comprovante compartilhado direto do app do banco (Android): o service worker guarda o arquivo e abre ?comprovante=1
