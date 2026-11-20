@@ -153,8 +153,8 @@ li.dupl .btn{flex:none}
 .tips{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:.93rem}
 
 #fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:6;border:none;border-radius:999px;padding:14px 20px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:1rem;box-shadow:0 6px 18px rgba(0,0,0,.22)}
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);padding:4px max(6px,env(safe-area-inset-right,0px)) calc(4px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
-nav.tabs button{border:none;background:none;padding:8px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.72rem;color:var(--muted);border-radius:10px}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:4px max(6px,env(safe-area-inset-right,0px)) calc(4px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
+nav.tabs button{border:none;background:none;padding:8px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.8rem;color:var(--muted);border-radius:10px}
 nav.tabs button svg{width:24px;height:24px}
 nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:700}
 
@@ -203,6 +203,25 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .dleg li.abre ul.list{margin:0 0 8px 22px;padding:0 10px;background:var(--surface2);border-radius:10px;font-size:.88rem}
 .dleg li.abre ul.list li{display:flex;border-bottom:1px solid var(--line);padding:9px 0}
 .dleg li.abre ul.list li:last-child{border-bottom:none}
+.simples{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:10px}
+.srow{display:flex;align-items:center;gap:12px}
+.sic{font-size:1.5rem;width:36px;text-align:center;flex:none}
+.st{flex:1;min-width:0;display:flex;flex-direction:column}
+.st b{font-size:1.05rem}
+.st small{color:var(--muted);font-size:.82rem}
+.srow .sv{font-size:1.35rem;white-space:nowrap}
+.gbar{height:10px;border-radius:6px;background:var(--surface2);border:1px solid var(--line);overflow:hidden}
+.gbar span{display:block;height:100%;background:var(--accent)}
+.gbar span.over{background:var(--danger)}
+.sobra{background:var(--save-soft);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:2px}
+.sobra span{font-weight:600}
+.sobra b{font-size:2rem;color:var(--save);letter-spacing:-.02em;line-height:1.15}
+.sobra small{color:var(--muted)}
+.sobra.neg{background:var(--danger-soft)} .sobra.neg b{color:var(--danger)}
+.mais{gap:0;padding:4px 14px}
+.mais-it{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:none;border-bottom:1px solid var(--line);background:none;padding:14px 0}
+.mais-it:last-child{border-bottom:none}
+.voltar{align-self:flex-start;border:none;background:none;color:var(--accent);font-weight:600;padding:4px 0;margin-bottom:-8px}
 </style>
 </head>
 <body>
@@ -213,12 +232,10 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 <main id="main" aria-live="polite"></main>
 <button id="fab" type="button">+ Lançar</button>
 <nav class="tabs" aria-label="Abas">
-  <button type="button" data-tab="mes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>Mês</button>
-  <button type="button" data-tab="graficos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Gráficos</button>
+  <button type="button" data-tab="inicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>Início</button>
+  <button type="button" data-tab="mes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Gastos</button>
   <button type="button" data-tab="divisao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 21h10M4 7h16"/><path d="M4 7l-2.5 6a2.5 2.5 0 0 0 5 0z"/><path d="M20 7l-2.5 6a2.5 2.5 0 0 0 5 0z"/></svg>Divisão</button>
-  <button type="button" data-tab="fixas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M17 15.5l2 2 3-3.5"/></svg>Fixas</button>
-  <button type="button" data-tab="planejar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V11M10 19V6M16 19v-5M21 19H3"/><path d="M14 8l3-3 3 3"/></svg>Planejar</button>
-  <button type="button" data-tab="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
+  <button type="button" data-tab="mais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>Mais</button>
 </nav>
 <dialog id="dlg"><form class="sheet" id="sheet" novalidate></form></dialog>
 <div id="toast" role="status" hidden></div>

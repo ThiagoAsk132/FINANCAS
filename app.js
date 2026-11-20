@@ -225,7 +225,7 @@ function telaDivisao() {
 }
 
 // ---------- estado da tela ----------
-let aba = loc.ler("aba", "mes");
+let aba = "inicio";
 let mesSel = mesAtual();
 let sync = { s: "local", arq: null, email: loc.ler("email", "") };
 let renderPendente = false;
@@ -239,13 +239,88 @@ function render() {
   const ae = document.activeElement;
   if (ae && $("main").contains(ae) && /^(INPUT|SELECT)$/.test(ae.tagName)) { renderPendente = true; return; }
   renderPendente = false;
-  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === aba ? "page" : "false"));
-  $("fab").hidden = aba === "ajustes" || aba === "graficos" || aba === "divisao";
-  const html = { mes: telaMes, graficos: telaGraficos, divisao: telaDivisao, fixas: telaFixas, planejar: telaPlanejar, ajustes: telaAjustes }[aba]();
+  const abaNav = SUB_MAIS.includes(aba) ? "mais" : aba;
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === abaNav ? "page" : "false"));
+  $("fab").hidden = !(aba === "inicio" || aba === "mes" || aba === "fixas");
+  const tela = { inicio: telaInicio, mes: telaMes, mais: telaMais, graficos: telaGraficos, divisao: telaDivisao, fixas: telaFixas, planejar: telaPlanejar, ajustes: telaAjustes }[aba] || telaInicio;
+  const html = (SUB_MAIS.includes(aba) ? voltarMais() : "") + tela();
   $("main").innerHTML = html;
   renderSync();
 }
 document.addEventListener("focusout", () => setTimeout(() => { if (renderPendente) render(); }, 0));
+
+
+// ---------- aba Início (versão simples: entrou, gastamos, sobra, guardar) ----------
+const SUB_MAIS = ["graficos", "fixas", "planejar", "ajustes"];
+function telaInicio() {
+  const m = mesSel, r = resumo(m), sai = r.pixFix + r.pixVar + r.fat, sobra = r.livre;
+  let h = avisoArquivo() + avisoDuplicados() + mesbar(m);
+  if (!r.ent) return h + `<div class="card"><b>Falta cadastrar os salários</b><span class="small muted">Sem o quanto entra, o app não consegue dizer quanto dá para gastar.</span><button type="button" class="btn primary" data-act="ir-aba" data-tab="fixas">Cadastrar salários</button></div>`;
+  const pg = Math.min(100, Math.round(sai / r.ent * 100));
+  h += `<section class="simples num">
+    <div class="srow"><span class="sic">💵</span><div class="st"><b>Entrou</b><small>salários e outras entradas</small></div><b class="sv pos">${R0(r.ent)}</b></div>
+    <div class="srow"><span class="sic">🛒</span><div class="st"><b>Gastamos</b><small>contas, cartão e compras do mês</small></div><b class="sv">${R0(sai)}</b></div>
+    ${r.guard ? `<div class="srow"><span class="sic">🐷</span><div class="st"><b>Guardamos</b><small>já separado este mês</small></div><b class="sv pos">${R0(r.guard)}</b></div>` : ""}
+    <div class="gbar" aria-hidden="true"><span style="width:${pg}%" class="${sai > r.ent ? "over" : ""}"></span></div>
+    <span class="small muted">${sai > r.ent ? "Os gastos passaram do que entrou." : `Já foi ${pg}% do que entrou.`}</span>
+    <div class="sobra ${sobra < 0 ? "neg" : ""}"><span>${sobra < 0 ? "Gastamos a mais" : "Ainda dá para gastar ou guardar"}</span><b>${sobra < 0 ? "−" : ""}${R0(Math.abs(sobra))}</b>`;
+  const ehAtual = m === mesAtual(), restam = ehAtual ? diasNoMes(m) - +hojeISO().slice(8, 10) + 1 : 0;
+  if (ehAtual && sobra > 0) h += `<small>uns ${R0(Math.floor(sobra / restam))} por dia nos ${restam} dias que faltam</small>`;
+  h += `</div></section>`;
+
+  // ----- quanto dá para guardar (a meta é referência; não sai do "dá para gastar")
+  const falta = Math.max(0, r.meta - r.guard);
+  let txt;
+  if (r.meta && r.guard >= r.meta) txt = `✓ Vocês já guardaram ${R0(r.guard)}: a meta do mês está cumprida.`;
+  else if (sobra <= 0) txt = `Este mês não sobrou para guardar. Para voltar ao azul, seria preciso gastar ${R0(-sobra)} a menos.`;
+  else if (!r.meta) txt = `Tudo o que sobrar (${R0(sobra)}) pode ir para a poupança.`;
+  else if (sobra >= falta) txt = `Dá para guardar <b>${R0(falta)}</b> (a meta) e ainda sobram <b>${R0(sobra - falta)}</b> para gastar.`;
+  else txt = `Dá para guardar até <b>${R0(sobra)}</b>. Para chegar na meta de ${R0(r.meta)}, precisariam gastar ${R0(falta - sobra)} a menos.`;
+  const gd = vivo(reg["gd|" + m]) ? reg["gd|" + m].valor : null;
+  h += `<section><h2>Quanto podemos guardar <small class="num">meta ${R0(r.meta)}</small></h2><div class="card"><span>${txt}</span>
+    <label class="field"><span class="label">Quanto guardaram de verdade em ${soMes(m)}</span><input inputmode="decimal" data-chg="guardado" data-mes="${m}" placeholder="R$ 0,00" value="${gd != null ? valorCampo(gd) : ""}"></label></div></section>`;
+
+  // ----- falta pagar
+  const hoje = hojeISO(), cs = cartoes();
+  const contas = r.its.filter(i => i.forma !== "credito" && i.k === "fixa" && !i.pago).sort((a, b) => (a.dia || 99) - (b.dia || 99));
+  const porCartao = {};
+  for (const i of r.its.filter(i => i.forma === "credito")) (porCartao[i.cartao] ||= []).push(i);
+  const fats = Object.entries(porCartao).filter(([cid]) => { const o = reg["fp|" + cid + "|" + m]; return !(vivo(o) && o.pago); });
+  const totFalta = soma(contas) + fats.reduce((s, [, its]) => s + soma(its), 0);
+  h += `<section><h2>Falta pagar <small class="num">${totFalta ? R0(totFalta) : ""}</small></h2>`;
+  if (!contas.length && !fats.length) h += `<div class="card okcard"><b>✓ Tudo pago neste mês.</b></div>`;
+  else {
+    h += `<div class="card flat"><ul class="list">`;
+    for (const i of contas) h += linhaFixaPix(i, m, hoje);
+    for (const [cid, its] of fats) {
+      const vd = vencData(m, cs[cid]), atr = vd < hoje;
+      h += li("Fatura " + esc(nomeCartao(cid)), R(soma(its)), { pre: `<button type="button" class="chk" data-act="fatura-paga" data-id="${cid}" data-mes="${m}" aria-pressed="false" aria-label="Marcar fatura como paga: ${esc(nomeCartao(cid))}">${ICON_OK}</button>`, act: `data-act="ir-aba" data-tab="mes"`, sub: atr ? `<span style="color:var(--danger);font-weight:600">venceu ${dataBR(vd)}</span>` : "vence " + dataBR(vd) });
+    }
+    h += `</ul><span class="small muted">Toque no círculo quando pagar.</span></div>`;
+  }
+  h += `</section>`;
+
+  // ----- onde foi o dinheiro (as 5 maiores categorias)
+  const porCat = {};
+  for (const i of r.its) porCat[i.cat || "Outros"] = (porCat[i.cat || "Outros"] || 0) + i.valor;
+  const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]), top = cats.slice(0, 5), resto = cats.slice(5).reduce((s, [, v]) => s + v, 0);
+  if (resto) top.push(["Outras coisas", resto]);
+  if (top.length) {
+    const max = top[0][1];
+    h += `<section><h2>Onde foi o dinheiro</h2><div class="card">` + top.map(([c, v]) => `<div class="catrow num"><span>${esc(c)}</span><b>${R0(v)}</b><div class="bar"><span style="width:${(v / max * 100).toFixed(1)}%"></span></div></div>`).join("") +
+      `<button type="button" class="btn" data-act="ir-aba" data-tab="mes">Ver cada gasto</button></div></section>`;
+  }
+
+  // ----- mês que vem
+  const prox = addMes(m, 1), r2 = resumo(prox), comp = r2.pixFix + r2.pixVar + r2.fat;
+  if (comp) h += `<button type="button" class="nextcard num" data-act="mes" data-d="1"><span>Em ${soMes(prox)} já tem <b>${R0(comp)}</b> de contas e parcelas marcadas.</span><span class="nv">›</span></button>`;
+  return h;
+}
+function telaMais() {
+  const it = (tab, ic, t, s) => `<button type="button" class="mais-it" data-act="ir-aba" data-tab="${tab}"><span class="sic">${ic}</span><span class="st"><b>${t}</b><small>${s}</small></span><span class="muted">›</span></button>`;
+  return `<section class="card flat mais">${it("graficos", "📊", "Gráficos", "gastos por categoria e por mês")}${it("fixas", "📋", "Contas fixas e salários", "aluguel, luz, escola, rendas")}${it("planejar", "🎯", "Planejar", "meta de guardar e limites")}${it("ajustes", "⚙️", "Ajustes", "nomes, cartões, Google, cópia")}</section>`;
+}
+const voltarMais = () => `<button type="button" class="voltar" data-act="ir-aba" data-tab="mais">‹ Mais</button>`;
 
 // ---------- aba Mês ----------
 function avisoArquivo() {
@@ -321,30 +396,8 @@ function telaMes() {
     <li>Em <b>Planejar</b>: quanto querem guardar por mês.</li>
     <li>No dia a dia: <b>+ Lançar</b> cada gasto que não é fixo.</li></ol></div>`;
 
-  // ----- resumo do mês
-  const ehAtual = m === mesAtual();
-  const restam = ehAtual ? diasNoMes(m) - +hojeISO().slice(8, 10) + 1 : 0;
-  const sai = r.pixFix + r.pixVar + r.fat;
-  const totBar = Math.max(r.ent, sai + r.guard, 1);
-  const w = v => (Math.max(v, 0) / totBar * 100).toFixed(2) + "%";
-  h += `<section class="hero"><span class="label">${r.livre >= 0 ? "Pode gastar em " + soMes(m) : "Passou do planejado em " + soMes(m)}</span>`;
-  if (!r.ent) h += `<div class="big num">—</div><span class="small muted">Cadastre as rendas na aba Fixas para o app calcular.</span>`;
-  else {
-    h += `<div class="big num${r.livre < 0 ? " neg" : ""}">${r.livre < 0 ? "−" : ""}${R(Math.abs(r.livre))}</div>`;
-    if (ehAtual && r.livre > 0) h += `<span class="small muted">≈ <b>${R(Math.floor(r.livre / restam))} por dia</b> nos ${restam} dias que faltam</span>`;
-    else if (r.livre < 0) h += `<span class="small muted">Contas, cartão, débito e Pix (e o que foi guardado) passam da renda do mês.</span>`;
-  }
-  const tv = v => R0(v).replace("R$ ", "<small>R$</small>").replace("R$ ", "<small>R$</small>");
-  h += `<div class="tiles num"><div><span>Entra</span><b class="pos">${tv(r.ent)}</b></div><div><span>Sai</span><b>${tv(sai)}</b></div><div><span>Guardado</span><b class="sv">${tv(r.guard)}</b></div></div>`;
-  h += `<div class="stack" aria-hidden="true"><span style="width:${w(r.pixFix)};background:var(--pix)"></span><span style="width:${w(r.fat)};background:var(--cred)"></span><span style="width:${w(r.pixVar)};background:var(--warn)"></span><span style="width:${w(r.guard)};background:var(--save)"></span></div>
-    <div class="legend num"><span><i style="background:var(--pix)"></i>Contas Pix</span><span><i style="background:var(--cred)"></i>Cartão</span>${r.pixVar ? `<span><i style="background:var(--warn)"></i>Débito/Pix</span>` : ""}<span><i style="background:var(--save)"></i>Guardado</span><span><i style="background:var(--free)"></i>Livre</span></div>`;
-  if (r.ent) h += `<span class="small muted">${pct(sai + r.guard, r.ent)}% da renda já tem destino.</span>`;
-  h += `</section>`;
-
-  // ----- mês que vem (atalho)
-  const prox = addMes(m, 1), r2 = resumo(prox);
-  h += `<button type="button" class="nextcard num" data-act="mes" data-d="1"><span><span class="label">${Maius(soMes(prox))}</span><br>já comprometido <b>${R(r2.pixFix + r2.pixVar + r2.fat)}</b></span><span class="nv">livre <b style="color:${r2.livre < 0 ? "var(--danger)" : "var(--save)"}">${R(r2.livre)}</b> ›</span></button>`;
-
+  const sai0 = r.pixFix + r.pixVar + r.fat;
+  h += `<div class="card"><span>Entrou <b class="pos num">${R(r.ent)}</b> · gastamos <b class="num">${R(sai0)}</b></span><span class="small muted">Aqui está cada conta, fatura e compra do mês. O resumo fica na aba Início.</span></div>`;
   // ----- contas fixas no Pix
   const hoje = hojeISO();
   const fixPix = r.its.filter(i => i.forma !== "credito" && i.k === "fixa").sort((a, b) => (a.dia || 99) - (b.dia || 99));
@@ -417,11 +470,6 @@ function telaMes() {
   }
   h += `</ul></details>`;
 
-  // ----- guardado
-  const gd = vivo(reg["gd|" + m]) ? reg["gd|" + m].valor : null;
-  h += `<section><h2>Guardar <small class="num">meta ${R(r.meta)}</small></h2><div class="card">
-    <label class="field"><span class="label">Quanto guardaram de fato em ${soMes(m)}</span><input inputmode="decimal" data-chg="guardado" data-mes="${m}" placeholder="R$ 0,00" value="${gd != null ? valorCampo(gd) : ""}"></label>
-    <span class="small muted">O valor lançado aqui sai do "pode gastar"; a meta é só referência. ${gd == null ? "" : gd >= r.meta ? "Meta do mês cumprida." : "Faltam " + R(r.meta - gd) + " para a meta do mês."}</span></div></section>`;
   return h;
 }
 
@@ -676,7 +724,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 19 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 20 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
@@ -1163,7 +1211,7 @@ async function criarArquivo() {
 
 // ---------- início ----------
 const voltouDoLogin = window.FIN.lerRetornoLogin();
-if (voltouDoLogin) { aba = loc.ler("aba", "mes"); }
+if (voltouDoLogin) { aba = loc.ler("aba", "inicio"); }
 render();
 sincronizar(false);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") sincronizar(false); });
