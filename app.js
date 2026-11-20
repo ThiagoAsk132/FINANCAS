@@ -635,10 +635,18 @@ function telaFixas() {
   const pixL = atv.filter(f => f.forma !== "credito"), credL = atv.filter(f => f.forma === "credito");
   h += `<section><h2>Pagas no Pix, boleto ou débito <button class="btn small" data-act="nova-fixa" data-forma="pix">+ Conta</button></h2><span class="small muted">Saem da conta do banco. Marque como paga no mês.</span><div class="card flat"><ul class="list">${grupo(pixL, "Ex.: aluguel, luz, água, internet, escola, financiamento.")}</ul></div></section>`;
   h += `<section><h2>Caem no cartão de crédito <button class="btn small" data-act="nova-fixa" data-forma="credito">+ Conta</button></h2><span class="small muted">Não se paga uma por uma: entram na fatura do cartão.</span>`;
-  if (!credL.length) h += `<div class="card flat"><ul class="list"><li class="empty" style="display:block">Ex.: streaming, academia, plano de celular, seguro.</li></ul></div>`;
-  const porC = {};
+  // por cartão: as contas fixas e as parcelas de compras que caem na fatura deste mês
+  const porC = {}, parc = {};
   for (const f of credL) (porC[f.cartao] ||= []).push(f);
-  for (const [cid, lst] of Object.entries(porC)) h += `<div class="card flat"><h3 class="ctit">💳 ${esc(nomeCartao(cid))} <small class="muted num">${R(lst.reduce((s, f) => s + valorEm(f, m), 0))}/mês</small></h3><ul class="list">${grupo(lst, "")}</ul></div>`;
+  for (const i of itensMes(m)) if (i.k === "gasto" && i.forma === "credito" && i.parcela) (parc[i.cartao] ||= []).push(i);
+  const ids = [...new Set([...Object.keys(porC), ...Object.keys(parc)])].filter(c => vivo(reg[c])).sort((a, b) => nomeCartao(a).localeCompare(nomeCartao(b)));
+  if (!ids.length) h += `<div class="card flat"><ul class="list"><li class="empty" style="display:block">Ex.: streaming, academia, plano de celular.</li></ul></div>`;
+  for (const cid of ids) {
+    const lst = porC[cid] || [], ps = parc[cid] || [];
+    const ultima = ps.reduce((u, i) => { const n = +i.parcela.split("/")[1] - +i.parcela.split("/")[0]; return Math.max(u, n); }, 0);
+    h += `<div class="card flat"><h3 class="ctit">💳 ${esc(nomeCartao(cid))} <small class="muted num">${R(lst.reduce((s, f) => s + valorEm(f, m), 0) + soma(ps))} em ${soMes(m)}</small></h3><ul class="list">${lst.length ? grupo(lst, "") : ""}` +
+      (ps.length ? `<li class="sub">Parcelas de compras no cartão · ${R(soma(ps))}</li>` + li(`${ps.length} ${ps.length === 1 ? "compra parcelada" : "compras parceladas"}`, R(soma(ps)), { act: `data-act="ir-aba" data-tab="mes"`, sub: ultima ? `a última termina em ${curtoMes(addMes(m, ultima))} · toque para ver` : "última parcela neste mês" }) : "") + `</ul></div>`;
+  }
   h += `</section>`;
   if (enc.length) {
     h += `<details class="card"><summary class="small muted">Contas encerradas (${enc.length})</summary><ul class="list">`;
@@ -762,7 +770,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 24 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 25 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
