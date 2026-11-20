@@ -1,6 +1,6 @@
 // Guarda os arquivos do app para abrir sem internet (os dados ficam no aparelho e no Google Drive).
 // Ao mudar qualquer arquivo do app, troque o nome do CACHE (financas-v2, v3...).
-const CACHE = "financas-v1";
+const CACHE = "financas-v2";
 const ARQUIVOS = ["./", "index.html", "config.js", "drive.js", "app.js", "manifest.webmanifest", "icone-192.png", "icone-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", e => {

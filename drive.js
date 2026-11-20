@@ -78,23 +78,17 @@ const drive = {
   // devolve {id, dono, meu} do arquivo de finanças (próprio ou compartilhado), ou null
   async achar() {
     if (DEMO) return loc.ler("demoArq", null) ? { id: "demo", dono: "demonstração", meu: true } : null;
-    const campos = "id,trashed,ownedByMe,owners(displayName,emailAddress)";
-    const salvo = loc.ler("arqId", null);
-    if (salvo) {
-      try {
-        const j = await (await api(API + "/files/" + salvo + "?fields=" + campos)).json();
-        if (!j.trashed) return info(j);
-      } catch (e) { if (e instanceof SemLogin) throw e; }
-      loc.apagar("arqId");
-    }
+    // Sempre procura de novo e escolhe o arquivo MAIS ANTIGO: se existirem dois (criados por engano),
+    // todos os aparelhos acabam no mesmo. Um arquivo compartilhado por outra pessoa vem antes do próprio.
+    const campos = "id,createdTime,ownedByMe,owners(displayName,emailAddress)";
     const q = encodeURIComponent("name = '" + CFG.NOME_ARQUIVO.replace(/'/g, "\\'") + "' and trashed = false");
-    const j = await (await api(API + "/files?q=" + q + "&orderBy=modifiedTime desc&fields=files(" + campos + ")&spaces=drive&pageSize=10")).json();
+    const j = await (await api(API + "/files?q=" + q + "&orderBy=createdTime&fields=files(" + campos + ")&spaces=drive&pageSize=20")).json();
     const lista = j.files || [];
-    // prefere o arquivo compartilhado por outra pessoa (o "da casa") ao próprio, se houver os dois
     const f = lista.find(x => !x.ownedByMe) || lista[0];
-    if (!f) return null;
+    if (!f) { loc.apagar("arqId"); return null; }
     loc.gravar("arqId", f.id);
-    return info(f);
+    const r = info(f); r.total = lista.length;
+    return r;
     function info(x) {
       const o = (x.owners || [])[0] || {};
       return { id: x.id, dono: o.displayName || o.emailAddress || "", meu: !!x.ownedByMe };

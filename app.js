@@ -401,6 +401,7 @@ function telaAjustes() {
   else {
     h += `<div class="kv small"><span>Conta</span><span class="v">${esc(sync.email || "…")}</span><span>Arquivo</span><span class="v">${sync.arq ? (sync.arq.meu ? "seu" : "de " + esc(sync.arq.dono)) : sync.s === "semArquivo" ? "ainda não existe" : "…"}</span><span>Última sincronização</span><span class="v">${loc.ler("ultimoSync", 0) ? new Date(loc.ler("ultimoSync", 0)).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</span></div>
       <div class="row"><button class="btn" data-act="sync">Sincronizar agora</button><button class="btn" data-act="sair">Sair</button></div>`;
+    if (sync.arq && sync.arq.total > 1) h += `<span class="small muted">Há ${sync.arq.total} arquivos "FINANCAS DA CASA.json" no Drive; o app usa sempre o mais antigo. Os outros podem ir para a lixeira.</span>`;
     if (sync.arq) h += `<label class="field"><span class="label">Compartilhar com (e-mail Google)</span><input type="email" id="emailComp" autocomplete="email" placeholder="email@gmail.com"></label>
       <button class="btn primary" data-act="compartilhar">Compartilhar o arquivo</button>
       <span class="small muted">A pessoa recebe um e-mail do Google, abre este app no celular dela, entra com a conta dela e passa a ver e lançar no mesmo arquivo.</span>`;
@@ -791,12 +792,20 @@ async function sincronizar(manual) {
     if (deNovo) { deNovo = false; agendarSync(); }
   }
 }
+let criando = false;
 async function criarArquivo() {
+  if (criando) return;                       // toque duplo não cria dois arquivos
+  criando = true;
+  document.querySelectorAll('[data-act="criar-arq"]').forEach(b => { b.disabled = true; b.textContent = "Criando…"; });
   try {
-    await drive.criar({ formato: "financas-casa-1", atualizado: new Date().toISOString(), registros: reg });
-    toast("Arquivo criado no seu Google Drive (pasta FINANCAS DA CASA).");
-    sincronizar(false);
+    if (await drive.achar()) { toast("O arquivo da casa já existe; usando ele."); }
+    else {
+      await drive.criar({ formato: "financas-casa-1", atualizado: new Date().toISOString(), registros: reg });
+      toast("Arquivo criado no seu Google Drive (pasta FINANCAS DA CASA).");
+    }
   } catch (e) { toast(e instanceof SemLogin ? "Entre de novo com o Google." : "Não consegui criar: " + e.message); }
+  criando = false;
+  sincronizar(false);
 }
 
 // ---------- início ----------
