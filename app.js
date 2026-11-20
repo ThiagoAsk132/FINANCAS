@@ -463,18 +463,18 @@ function telaPlanejar() {
     ${c.meta.modo === "valor"
       ? `<label class="field"><span class="label">Guardar por mês</span><input inputmode="decimal" data-chg="metaValor" value="${valorCampo(c.meta.valor)}" placeholder="R$ 0,00"></label>`
       : `<label class="field"><span class="label">Porcentagem da renda</span><input inputmode="numeric" data-chg="metaPct" value="${c.meta.pct}" placeholder="20"></label>`}
-    <span class="small muted">Referência comum: 20% da renda (regra 50/30/20). Se hoje não dá, comecem com 5–10% e subam aos poucos.</span></div></section>`;
+    <span class="small muted">Regra de vocês (60/30/10): guardar pelo menos 10% da renda. Se hoje não dá, comecem com 5% e subam aos poucos.</span></div></section>`;
 
-  // 50/30/20
+  // 60/30/10 (regra escolhida pelo casal em 19/11/2026)
   if (rendaFixa) {
     let nec = 0, des = 0;
     for (const f of todos("fixa").filter(f => ativo(f, m0))) (NECESSIDADE.has(f.cat) ? (nec += valorEm(f, m0)) : (des += valorEm(f, m0)));
     if (mv) for (const [cat, v] of Object.entries(mv.porCat)) (NECESSIDADE.has(cat) ? (nec += v) : (des += v));
     const barra = (rot, v, ideal, cor, txt) => `<div class="catrow num"><span>${rot}</span><span><b>${pct(v, rendaFixa)}%</b> <span class="muted small">${txt} ${ideal}%</span></span><div class="bar"><span style="width:${Math.min(100, pct(v, rendaFixa))}%;background:${cor}"></span></div></div>`;
-    h += `<section><h2>Regra 50/30/20</h2><div class="card">
-      ${barra("Necessidades (casa, contas, mercado, saúde…)", nec, 50, nec / rendaFixa > .5 ? "var(--danger)" : "var(--pix)", "ideal até")}
+    h += `<section><h2>Regra 60/30/10</h2><div class="card">
+      ${barra("Necessidades (casa, contas, mercado, saúde…)", nec, 60, nec / rendaFixa > .6 ? "var(--danger)" : "var(--pix)", "ideal até")}
       ${barra("Desejos (lazer, delivery, assinaturas…)", des, 30, des / rendaFixa > .3 ? "var(--danger)" : "var(--cred)", "ideal até")}
-      ${barra("Guardar", meta, 20, "var(--save)", "ideal pelo menos")}
+      ${barra("Guardar", meta, 10, meta / rendaFixa < .1 ? "var(--warn)" : "var(--save)", "ideal pelo menos")}
       <span class="small muted">${mv ? "Fixas + média dos gastos lançados" : "Só as contas fixas por enquanto; os gastos do dia a dia entram depois de um mês de lançamentos"}. A categoria de cada conta decide se ela é necessidade ou desejo.</span></div></section>`;
   }
 
