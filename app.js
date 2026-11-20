@@ -580,6 +580,12 @@ function telaGraficos() {
 }
 
 // ---------- aba Fixas ----------
+// linha "Quem paga" de cada conta fixa: no Pix escolhe com um toque; no crédito é o dono do cartão
+function quemPaga(f) {
+  if (f.forma === "credito") { const d = donoCartao(f.cartao); return `<div class="quem"><span>Quem paga:</span><b>${d ? esc(nomeP(d)) : "?"}</b><small class="muted">(dono do cartão)</small></div>`; }
+  const b = p => `<button type="button" class="pill${f.pagador === p ? " on" : ""}" data-act="pagador" data-id="${f.id}" data-p="${p}" aria-pressed="${f.pagador === p}">${esc(nomeP(p))}</button>`;
+  return `<div class="quem"><span class="${f.pagador ? "" : "falta"}">${f.pagador ? "Quem paga:" : "Quem paga? Toque:"}</span>${b("a")}${b("b")}</div>`;
+}
 function telaFixas() {
   const m = mesAtual();
   const rendas = todos("renda").sort((a, b) => (a.pessoa || "").localeCompare(b.pessoa || "") || (a.dia || 0) - (b.dia || 0));
@@ -599,7 +605,10 @@ function telaFixas() {
     const lst = atv.filter(f => (f.forma === "credito") === (forma === "credito"));
     h += `<section><h2>${titulo} <button class="btn small" data-act="nova-fixa" data-forma="${forma}">+ Conta</button></h2><div class="card flat"><ul class="list">`;
     if (!lst.length) h += `<li class="empty" style="display:block">${forma === "pix" ? "Ex.: aluguel, luz, água, internet, escola, financiamento." : "Ex.: streaming, academia, plano de celular, seguro."}</li>`;
-    for (const f of lst) h += li(esc(f.desc) + (f.ini > m ? ` <span class="tag pix">a partir de ${curtoMes(f.ini)}</span>` : ""), R(valorEm(f, f.ini > m ? f.ini : m)), { act: `data-act="edit" data-id="${f.id}"`, sub: (forma === "credito" ? esc(nomeCartao(f.cartao)) + " · cobra dia " + (f.dia || 1) : f.dia ? "vence dia " + f.dia : "sem vencimento") + " · " + esc(f.cat || "") + (f.fim ? " · até " + curtoMes(f.fim) : "") });
+    for (const f of lst) {
+      const base = li(esc(f.desc) + (f.ini > m ? ` <span class="tag pix">a partir de ${curtoMes(f.ini)}</span>` : ""), R(valorEm(f, f.ini > m ? f.ini : m)), { act: `data-act="edit" data-id="${f.id}"`, sub: (forma === "credito" ? esc(nomeCartao(f.cartao)) + " · cobra dia " + (f.dia || 1) : f.dia ? "vence dia " + f.dia : "sem vencimento") + " · " + esc(f.cat || "") + (f.fim ? " · até " + curtoMes(f.fim) : "") });
+      h += base.replace(/^<li>/, '<li class="fx"><div class="fx-top">').replace(/<\/li>$/, "</div>" + quemPaga(f) + "</li>");
+    }
     h += `</ul></div></section>`;
   }
   if (enc.length) {
@@ -607,7 +616,7 @@ function telaFixas() {
     for (const f of enc) h += li(esc(f.desc), R(valorEm(f, f.fim)), { act: `data-act="edit" data-id="${f.id}"`, sub: "terminou em " + curtoMes(f.fim) });
     h += `</ul></details>`;
   }
-  h += `<span class="small muted">Valor que muda todo mês (luz, água)? Cadastre a média aqui e ajuste o valor real na aba Mês, tocando na conta.</span>`;
+  h += `<span class="small muted">Valor que muda todo mês (luz, água)? Cadastre a média aqui e ajuste o valor real na aba Gastos, tocando na conta. Quem paga cada conta entra no cálculo da aba Divisão.</span>`;
   return h;
 }
 
@@ -724,7 +733,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 20 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 21 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
