@@ -248,12 +248,15 @@ function telaMes() {
   // ----- faturas
   const cred = r.its.filter(i => i.forma === "credito"), porCartao = {};
   for (const i of cred) (porCartao[i.cartao] ||= []).push(i);
-  h += `<section><h2>Faturas do cartão <small class="num">${R(r.fat)}</small></h2>`;
+  const fpaga = cid => { const o = reg["fp|" + cid + "|" + m]; return !!(vivo(o) && o.pago); };
+  const fAbertas = Object.entries(porCartao).filter(([cid]) => !fpaga(cid));
+  h += `<section><h2>Faturas do cartão <small class="num">${!cred.length ? "" : fAbertas.length ? "falta pagar " + R(fAbertas.reduce((s, [, its]) => s + soma(its), 0)) : "tudo pago"}</small></h2>`;
   if (!cred.length) h += `<div class="card"><span class="empty">Nenhuma fatura vencendo em ${soMes(m)}.</span></div>`;
   const cs = cartoes();
   for (const [cid, its] of Object.entries(porCartao)) {
     its.sort((a, b) => a.data.localeCompare(b.data));
-    h += `<details class="fatura"><summary><span><b>${esc(nomeCartao(cid))}</b><br><span class="small muted">vence ${dataBR(vencData(m, cs[cid]))} · ${its.length} ${its.length === 1 ? "item" : "itens"} · toque para ver</span></span><b class="num">${R(soma(its))}</b></summary><div class="in"><ul class="list">`;
+    const pg = fpaga(cid), vd = vencData(m, cs[cid]), atr = !pg && vd < hoje;
+    h += `<details class="fatura${pg ? " paga" : ""}"><summary><button type="button" class="chk${pg ? " on" : ""}" data-act="fatura-paga" data-id="${cid}" data-mes="${m}" aria-pressed="${pg}" aria-label="${pg ? "Marcar fatura como não paga" : "Marcar fatura como paga"}: ${esc(nomeCartao(cid))}">${ICON_OK}</button><span style="flex:1;min-width:0"><b>${esc(nomeCartao(cid))}</b><br><span class="small muted">${pg ? "paga · " : atr ? `<span style="color:var(--danger);font-weight:600">venceu ${dataBR(vd)}</span> · ` : "vence " + dataBR(vd) + " · "}${its.length} ${its.length === 1 ? "item" : "itens"} · toque para ver</span></span><b class="num">${R(soma(its))}</b></summary><div class="in"><ul class="list">`;
     for (const i of its) {
       if (i.k === "fixa") h += li(esc(i.desc), R(i.valor), { act: `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${i.mesRef}"`, sub: "conta fixa · cobra dia " + (i.rec.dia || 1) + " · " + esc(i.cat || "") });
       else h += li(esc(i.desc) + (i.parcela ? ` <span class="tag cred">${i.parcela}</span>` : ""), R(i.valor), { act: `data-act="edit" data-id="${i.rec.id}"`, sub: "compra " + dataBR(i.data) + " · " + esc(i.cat || "") + (i.parcela ? " · total " + R(i.rec.valor) : "") });
@@ -810,6 +813,11 @@ $("main").addEventListener("click", async e => {
   else if (a === "edit") editar(id);
   else if (a === "fixa-mes") formFixaMes(id, b.dataset.mes);
   else if (a === "renda-mes") formRendaMes(id, mesSel);
+  else if (a === "fatura-paga") {
+    e.preventDefault();
+    const ch = "fp|" + id + "|" + b.dataset.mes, o = vivo(reg[ch]) ? reg[ch] : { id: ch, tipo: "faturaMes", cartao: id, mes: b.dataset.mes };
+    gravar({ ...o, pago: !o.pago });
+  }
   else if (a === "pago") {
     const ch = "fm|" + id + "|" + b.dataset.mes, o = vivo(reg[ch]) ? reg[ch] : { id: ch, tipo: "fixaMes", fixaId: id, mes: b.dataset.mes, valor: null };
     gravar({ ...o, pago: !o.pago });
