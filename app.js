@@ -31,6 +31,20 @@ function centavos(s) {
   const n = Number(s);
   return isFinite(n) ? Math.round(n * 100) : NaN;
 }
+// dias úteis: seg–sex fora dos feriados nacionais (fixos + Sexta-feira Santa). Feriados municipais não entram.
+function pascoa(y) { const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1; return new Date(y, mes - 1, dia); }
+function feriado(dt) {
+  const md = p2(dt.getMonth() + 1) + "-" + p2(dt.getDate());
+  if (["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"].includes(md)) return true;
+  const sexta = pascoa(dt.getFullYear()); sexta.setDate(sexta.getDate() - 2);
+  return sexta.getMonth() === dt.getMonth() && sexta.getDate() === dt.getDate();
+}
+function diaUtil(mes, n) {
+  let c = 0;
+  for (let d = 1; d <= diasNoMes(mes); d++) { const dt = new Date(+mes.slice(0, 4), +mes.slice(5) - 1, d), w = dt.getDay(); if (w && w !== 6 && !feriado(dt) && ++c === n) return d; }
+  return diasNoMes(mes);
+}
+const quandoRenda = (r, m) => r.util ? `${r.dia}º dia útil (${p2(diaUtil(m, r.dia))}/${m.slice(5)})` : "dia " + (r.dia || 1);
 const valorCampo = c => c ? (c / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
 const pct = (a, b) => b > 0 ? Math.round(a / b * 100) : 0;
 
@@ -84,7 +98,7 @@ function itensMes(m) {
     if (f.forma !== "credito") {
       if (!ativo(f, m)) continue;
       const ch = "fm|" + f.id + "|" + m, o = vivo(reg[ch]) ? reg[ch] : null;
-      out.push({ k: "fixa", forma: "pix", rec: f, desc: f.desc, cat: f.cat, valor: o && o.valor != null ? o.valor : valorEm(f, m), pago: !!(o && o.pago), dia: f.dia || 1, mesRef: m, data: m + "-" + p2(Math.min(f.dia || 1, diasNoMes(m))) });
+      out.push({ k: "fixa", forma: "pix", rec: f, desc: f.desc, cat: f.cat, valor: o && o.valor != null ? o.valor : valorEm(f, m), pago: !!(o && o.pago), dia: f.dia || 0, mesRef: m, data: m + "-" + p2(Math.min(f.dia || 31, diasNoMes(m))) });
     } else {
       for (const c of [addMes(m, -2), addMes(m, -1), m]) {
         if (!ativo(f, c)) continue;
@@ -202,7 +216,7 @@ function telaMes() {
   h += `<section><h2>Entradas <small class="num">${R(r.ent)}</small></h2><div class="card flat"><ul class="list">`;
   if (!r.ents.length) h += `<li class="empty" style="display:block">Nenhuma renda neste mês.</li>`;
   for (const e of r.ents) {
-    if (e.k === "renda") h += li(esc(e.desc), R(e.valor), { act: `data-act="renda-mes" data-id="${e.rec.id}"`, sub: esc(nomeP(e.pessoa)) + " · dia " + e.dia + (e.ajustado ? " · valor ajustado neste mês" : ""), cls: "pos" });
+    if (e.k === "renda") h += li(esc(e.desc), R(e.valor), { act: `data-act="renda-mes" data-id="${e.rec.id}"`, sub: esc(nomeP(e.pessoa)) + " · " + quandoRenda(e.rec, m) + (e.ajustado ? " · valor ajustado neste mês" : ""), cls: "pos" });
     else h += li(esc(e.desc), R(e.valor), { act: `data-act="edit" data-id="${e.rec.id}"`, sub: dataBR(e.data) + " · " + esc(nomeP(e.pessoa)) + " · entrada avulsa", cls: "pos" });
   }
   h += `</ul></div></section>`;
@@ -217,11 +231,11 @@ function telaMes() {
   const hoje = hojeISO();
   for (const i of pix) {
     if (i.k === "fixa") {
-      const atrasada = !i.pago && i.data < hoje;
+      const atrasada = !i.pago && i.dia && i.data < hoje;
       h += li(esc(i.desc), R(i.valor), {
         pre: `<button type="button" class="chk${i.pago ? " on" : ""}" data-act="pago" data-id="${i.rec.id}" data-mes="${m}" aria-label="${i.pago ? "Marcar como não paga" : "Marcar como paga"}: ${esc(i.desc)}" aria-pressed="${i.pago}">${ICON_OK}</button>`,
         act: `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${m}"`,
-        sub: (atrasada ? `<span style="color:var(--danger);font-weight:600">venceu dia ${i.dia}</span>` : "vence dia " + i.dia) + " · " + esc(i.cat || "")
+        sub: (!i.dia ? "sem vencimento" : atrasada ? `<span style="color:var(--danger);font-weight:600">venceu dia ${i.dia}</span>` : "vence dia " + i.dia) + " · " + esc(i.cat || "")
       });
     } else h += li(esc(i.desc), R(i.valor), { act: `data-act="edit" data-id="${i.rec.id}"`, sub: dataBR(i.data) + " · " + esc(i.cat || "") + " · " + FORMAS[i.forma] + " · " + esc(nomeP(i.rec.pessoa)) });
   }
@@ -270,7 +284,7 @@ function telaMes() {
 function telaFixas() {
   const m = mesAtual();
   const rendas = todos("renda").sort((a, b) => (a.pessoa || "").localeCompare(b.pessoa || "") || (a.dia || 0) - (b.dia || 0));
-  const fixas = todos("fixa").sort((a, b) => (a.dia || 0) - (b.dia || 0));
+  const fixas = todos("fixa").sort((a, b) => (a.dia || 99) - (b.dia || 99));
   const atv = fixas.filter(f => !f.fim || f.fim >= m), enc = fixas.filter(f => f.fim && f.fim < m);
   const rendaTot = rendas.filter(r => ativo(r, m)).reduce((s, r) => s + valorEm(r, m), 0);
   const tot = forma => atv.filter(f => (f.forma === "credito") === (forma === "credito") && ativo(f, m)).reduce((s, f) => s + valorEm(f, m), 0);
@@ -280,13 +294,13 @@ function telaFixas() {
     ${rendaTot ? `<span class="sep"></span><span>As fixas levam</span><span class="v">${pct(tPix + tCred, rendaTot)}% da renda</span>` : ""}</div></section>`;
   h += `<section><h2>Rendas <button class="btn small" data-act="nova-renda">+ Renda</button></h2><div class="card flat"><ul class="list">`;
   if (!rendas.length) h += `<li class="empty" style="display:block">Cadastre o salário de cada um (e outras rendas que se repetem).</li>`;
-  for (const r of rendas) h += li(esc(r.desc), R(valorEm(r, m)), { act: `data-act="edit" data-id="${r.id}"`, sub: esc(nomeP(r.pessoa)) + " · dia " + (r.dia || 1) + (r.fim ? " · até " + curtoMes(r.fim) : ""), cls: "pos" });
+  for (const r of rendas) h += li(esc(r.desc), R(valorEm(r, m)), { act: `data-act="edit" data-id="${r.id}"`, sub: esc(nomeP(r.pessoa)) + " · " + quandoRenda(r, m) + (r.fim ? " · até " + curtoMes(r.fim) : ""), cls: "pos" });
   h += `</ul></div></section>`;
   for (const [forma, titulo] of [["pix", "Contas fixas no Pix / débito"], ["credito", "Contas fixas no cartão de crédito"]]) {
     const lst = atv.filter(f => (f.forma === "credito") === (forma === "credito"));
     h += `<section><h2>${titulo} <button class="btn small" data-act="nova-fixa" data-forma="${forma}">+ Conta</button></h2><div class="card flat"><ul class="list">`;
     if (!lst.length) h += `<li class="empty" style="display:block">${forma === "pix" ? "Ex.: aluguel, luz, água, internet, escola, financiamento." : "Ex.: streaming, academia, plano de celular, seguro."}</li>`;
-    for (const f of lst) h += li(esc(f.desc) + (f.ini > m ? ` <span class="tag pix">a partir de ${curtoMes(f.ini)}</span>` : ""), R(valorEm(f, f.ini > m ? f.ini : m)), { act: `data-act="edit" data-id="${f.id}"`, sub: (forma === "credito" ? esc(nomeCartao(f.cartao)) + " · cobra dia " : "vence dia ") + (f.dia || 1) + " · " + esc(f.cat || "") + (f.fim ? " · até " + curtoMes(f.fim) : "") });
+    for (const f of lst) h += li(esc(f.desc) + (f.ini > m ? ` <span class="tag pix">a partir de ${curtoMes(f.ini)}</span>` : ""), R(valorEm(f, f.ini > m ? f.ini : m)), { act: `data-act="edit" data-id="${f.id}"`, sub: (forma === "credito" ? esc(nomeCartao(f.cartao)) + " · cobra dia " + (f.dia || 1) : f.dia ? "vence dia " + f.dia : "sem vencimento") + " · " + esc(f.cat || "") + (f.fim ? " · até " + curtoMes(f.fim) : "") });
     h += `</ul></div></section>`;
   }
   if (enc.length) {
@@ -550,15 +564,16 @@ function formFixa(rec, formaIni) {
         dica: v => novo ? "" : "Mudou o valor (reajuste)? Os meses antes deste continuam com o valor antigo." },
       { n: "forma", rot: "Como é paga", tipo: "seg", v: f.forma || formaIni || "pix", ops: [{ v: "pix", t: "Pix / boleto / débito" }, { v: "credito", t: "Cartão de crédito" }] },
       { n: "cartao", rot: "Cartão", tipo: "sel", v: f.cartao || (cs[0] && cs[0].v), ops: cs.length ? cs : [{ v: "", t: "Nenhum cartão cadastrado" }], se: v => v.forma === "credito" },
-      { n: "dia", rot: "Dia do vencimento", tipo: "int", v: f.dia || 10, min: 1, max: 31,
-        dica: v => v.forma === "credito" ? "No crédito, é o dia em que a cobrança entra no cartão." : "" },
+      { n: "dia", rot: "Dia do vencimento", tipo: "int", v: novo ? 10 : (f.dia || ""), min: 1, max: 31, ph: "sem vencimento",
+        dica: v => v.forma === "credito" ? "No crédito, é o dia em que a cobrança entra no cartão." : "Deixe vazio se não tem vencimento (mercado, remédio)." },
       { n: "cat", rot: "Categoria", tipo: "sel", v: f.cat || "Contas da casa", ops: opsCat() },
       { n: "fim", rot: "Último mês (deixe vazio se não tem fim)", tipo: "mes", v: f.fim || "" }
     ],
     salvar(v) {
       const e = exigir(v, ["desc", "valor"]); if (e) return e;
       if (!/^\d{4}-\d{2}$/.test(v.apartir)) return "Informe o mês.";
-      const dia = parseInt(v.dia); if (!(dia >= 1 && dia <= 31)) return "Dia: de 1 a 31.";
+      const dia = String(v.dia).trim() === "" && v.forma !== "credito" ? 0 : parseInt(v.dia);
+      if (!(dia === 0 || (dia >= 1 && dia <= 31))) return v.forma === "credito" ? "No crédito, informe o dia da cobrança (1 a 31)." : "Dia: de 1 a 31, ou vazio.";
       if (v.forma === "credito" && !vivo(reg[v.cartao])) return "Cadastre um cartão em Ajustes ou escolha Pix.";
       if (v.fim && v.fim < v.apartir && novo) return "O último mês não pode ser antes do começo.";
       const c = centavos(v.valor);
@@ -585,19 +600,21 @@ function formRenda(rec) {
       { n: "pessoa", rot: "De quem", tipo: "seg", v: r.pessoa || eu(), ops: opsPessoa() },
       { n: "valor", rot: "Valor líquido por mês (o que cai na conta)", tipo: "valor", v: novo ? 0 : valorEm(r, mDef) },
       { n: "apartir", rot: novo ? "Começa em" : "Este valor vale a partir de", tipo: "mes", v: mDef },
-      { n: "dia", rot: "Dia em que cai", tipo: "int", v: r.dia || 5, min: 1, max: 31 },
+      { n: "quando", rot: "Quando cai", tipo: "seg", v: r.util ? "util" : (novo ? "util" : "dia"), ops: [{ v: "util", t: "Dia útil" }, { v: "dia", t: "Dia fixo do mês" }] },
+      { n: "dia", rot: "Dia", tipo: "int", v: r.dia || 5, min: 1, max: 31,
+        dica: v => { const n = parseInt(v.dia) || 1, m = mesAtual(); return v.quando === "util" ? `${n}º dia útil — em ${soMes(m)} cai dia ${diaUtil(m, n)} (conta seg–sex e feriados nacionais).` : ""; } },
       { n: "fim", rot: "Último mês (deixe vazio se não tem fim)", tipo: "mes", v: r.fim || "" }
     ],
     salvar(v) {
       const e = exigir(v, ["desc", "valor"]); if (e) return e;
       if (!/^\d{4}-\d{2}$/.test(v.apartir)) return "Informe o mês.";
-      const dia = parseInt(v.dia); if (!(dia >= 1 && dia <= 31)) return "Dia: de 1 a 31.";
+      const dia = parseInt(v.dia); if (!(dia >= 1 && dia <= (v.quando === "util" ? 23 : 31))) return "Dia inválido.";
       const c = centavos(v.valor);
       let valores = (r.valores || []).slice();
       if (novo) valores = [{ ini: v.apartir, v: c }];
       else if (valorEm(r, v.apartir) !== c || valores.some(x => x.ini > v.apartir) || !valores.length) valores = valores.filter(x => x.ini < v.apartir).concat({ ini: v.apartir, v: c });
       valores.sort((a, b) => a.ini.localeCompare(b.ini));
-      gravar({ id: r.id || novoId("r"), tipo: "renda", desc: v.desc.trim(), pessoa: v.pessoa, valores, ini: valores[0].ini, dia, fim: v.fim || "" });
+      gravar({ id: r.id || novoId("r"), tipo: "renda", desc: v.desc.trim(), pessoa: v.pessoa, valores, ini: valores[0].ini, dia, util: v.quando === "util", fim: v.fim || "" });
     },
     excluir: novo ? null : () => apagar(r.id)
   });
