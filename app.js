@@ -198,10 +198,54 @@ function linhaFixaPix(i, m, hoje) {
   });
 }
 
+// ---------- lançamentos duplicados ----------
+// mesmo valor, datas até 3 dias de diferença (o banco às vezes registra o débito dias depois),
+// mesma forma de pagamento (Pix e débito contam como iguais; no crédito, o mesmo cartão).
+// Não acusa dois itens vindos do mesmo extrato/fatura (cada linha do banco é uma compra diferente).
+const IMPORTADO = /^(ofx-|bbc-|nut-|nu20|nc-)/;
+const diasISO = d => Math.round(new Date(d + "T12:00").getTime() / 864e5);
+const origemDe = x => IMPORTADO.test(x.id) ? (x.conta || x.cartao || "importado") : "";
+const parDup = (a, b) => "dok|" + [a, b].sort().join("|");
+function duplicados() {
+  const porValor = {};
+  for (const g of todos("gasto")) if (g.valor > 0 && g.data) (porValor[g.valor] = porValor[g.valor] || []).push(g);
+  const pares = [];
+  for (const lista of Object.values(porValor)) {
+    if (lista.length < 2) continue;
+    for (let i = 0; i < lista.length; i++) for (let j = i + 1; j < lista.length; j++) {
+      const a = lista[i], b = lista[j];
+      if (Math.abs(diasISO(a.data) - diasISO(b.data)) > 3) continue;
+      const credA = a.forma === "credito", credB = b.forma === "credito";
+      if (credA !== credB || (credA && a.cartao !== b.cartao)) continue;
+      const oa = origemDe(a), ob = origemDe(b);
+      if (oa && ob && oa === ob) continue;
+      if (vivo(reg[parDup(a.id, b.id)])) continue;   // já disseram que não é duplicado
+      // sugestão: manter o que veio do extrato/fatura; apagar o lançado à mão (ou o mais novo)
+      const [fica, sai] = oa && !ob ? [a, b] : ob && !oa ? [b, a] : (a.upd || 0) <= (b.upd || 0) ? [a, b] : [b, a];
+      pares.push({ fica, sai });
+    }
+  }
+  return pares;
+}
+function avisoDuplicados() {
+  const pares = duplicados();
+  if (!pares.length) return "";
+  const linha = (x, sugerido) => `<li class="dupl"><div class="li-main"><span>${esc(x.desc)}</span><small>${dataBRano(x.data)} · ${x.forma === "credito" ? esc(nomeCartao(x.cartao)) : (FORMAS[x.forma] || "Pix") + (x.conta ? " · " + esc(x.conta) : "")} · ${esc(nomeP(x.pessoa))}${IMPORTADO.test(x.id) ? " · do extrato/fatura" : x.origem === "comprovante" ? " · do comprovante" : " · lançado à mão"}</small></div>
+    <button type="button" class="btn small${sugerido ? " danger" : ""}" data-act="dup-apagar" data-id="${x.id}">Apagar este</button></li>`;
+  let h = `<section><div class="alert warn"><strong>⚠ ${pares.length === 1 ? "Parece que tem um lançamento duplicado" : `Parece que tem ${pares.length} lançamentos duplicados`}</strong>
+    <span class="small">Mesmo valor, mesma forma de pagamento e datas próximas. Posso apagar a cópia? O botão vermelho é o que eu sugiro apagar.</span>`;
+  for (const { fica, sai } of pares.slice(0, 10)) {
+    h += `<div class="card dupcard"><div class="duptop"><b class="num">${R(fica.valor)}</b><button type="button" class="btn small" data-act="dup-ok" data-a="${fica.id}" data-b="${sai.id}">Não é duplicado</button></div>
+      <ul class="list">${linha(sai, true)}${linha(fica, false)}</ul></div>`;
+  }
+  if (pares.length > 10) h += `<span class="small">E mais ${pares.length - 10}. Resolva estes primeiro.</span>`;
+  return h + `</div></section>`;
+}
+
 function telaMes() {
   const m = mesSel, r = resumo(m), c = cfg();
   const vazio = !todos("renda").length && !todos("fixa").length && !todos("gasto").length;
-  let h = avisoArquivo() + mesbar(m);
+  let h = avisoArquivo() + avisoDuplicados() + mesbar(m);
   if (vazio) h += `<div class="alert info"><strong>Primeiros passos</strong><ol class="steps small">
     <li>Em <b>Ajustes</b>: os nomes de vocês e os cartões de crédito (dia do fechamento e do vencimento).</li>
     <li>Em <b>Fixas</b>: as rendas (salários) e todas as contas fixas, dizendo se cada uma é paga no Pix ou no crédito.</li>
@@ -563,7 +607,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 17 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 18 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
@@ -692,7 +736,9 @@ function formLancamento(rec, pre) {
         }
       }
       gravar(base);
-      if (novo) toast(v.tipo === "entrada" ? "Entrada lançada." : v.forma === "credito" ? "Lançado na fatura de " + soMes(vencMes(v.data, reg[v.cartao])) + "." : "Gasto lançado.");
+      const dup = novo && v.tipo === "gasto" && duplicados().some(p => p.fica.id === base.id || p.sai.id === base.id);
+      if (dup) toast("⚠ Já existe um gasto igual a este. Veja o aviso no topo da aba Mês.", 6000);
+      else if (novo) toast(v.tipo === "entrada" ? "Entrada lançada." : v.forma === "credito" ? "Lançado na fatura de " + soMes(vencMes(v.data, reg[v.cartao])) + "." : "Gasto lançado.");
       if (novo && mesDe(v.data) !== mesSel && v.forma !== "credito") mesSel = mesDe(v.data), render();
     },
     excluir: novo ? null : () => { apagar(g.id); toast("Lançamento excluído."); }
@@ -895,6 +941,8 @@ $("main").addEventListener("click", async e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const a = b.dataset.act, id = b.dataset.id;
   if (a === "mes") { mesSel = addMes(mesSel, +b.dataset.d); render(); }
+  else if (a === "dup-apagar") { const x = reg[id]; apagar(id); toast(`"${x ? x.desc : "Lançamento"}" apagado.`); }
+  else if (a === "dup-ok") { const k = parDup(b.dataset.a, b.dataset.b); gravar({ id: k, tipo: "dupOk" }); toast("Certo, não vou mais avisar sobre esses dois."); }
   else if (a === "ir-aba") { aba = b.dataset.tab; loc.gravar("aba", aba); render(); window.scrollTo(0, 0); }
   else if (a === "edit") editar(id);
   else if (a === "fixa-mes") formFixaMes(id, b.dataset.mes);

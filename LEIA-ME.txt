@@ -28,7 +28,8 @@ PRIMEIRO USO NO iPHONE
 Safari > endereço > Compartilhar > Adicionar à Tela de Início > abrir pelo ícone > Ajustes > Entrar com Google >
 Criar arquivo da casa > Ajustes > Compartilhar com o e-mail dela. Ela abre o app, entra com a conta dela.
 
-Ao mudar arquivos do app: subir de novo no GitHub, trocar o CACHE em sw.js e o número da versão no rodapé de Ajustes (app.js) (financas-v2...; em 20/11/2026 está em financas-v17).
+Ao mudar arquivos do app: subir de novo no GitHub, trocar o CACHE em sw.js e o número da versão no rodapé de Ajustes (app.js) (financas-v2...; em 20/11/2026 está em financas-v18).
 Teste sem Google: endereço com ?demo=1.
 
 Comprovante (versão 15): no + Lançar, botão "📷 Comprovante" lê foto/print ou PDF do comprovante no próprio aparelho (Tesseract.js para imagem, pdf.js para PDF; baixados de cdn.jsdelivr.net / cdnjs na primeira vez). Preenche valor, data, forma, quem recebeu e categoria; a pessoa só escreve o que foi comprado. No Android, com o app instalado pelo Chrome, dá para Compartilhar o comprovante direto do banco para "Finanças" (share_target no manifest + rota POST ./compartilhar no sw.js). No iPhone o Safari não aceita compartilhar para app da web: salvar a imagem e usar o botão.
+Duplicados (versão 18): a aba Mês mostra um aviso quando há gastos com mesmo valor, mesma forma (Pix/débito juntos; crédito no mesmo cartão) e datas até 3 dias de diferença. Sugere apagar o lançado à mão e manter o do extrato/fatura. "Não é duplicado" grava um registro dok|idA|idB e o par não volta.
