@@ -316,7 +316,10 @@ function rosca(fatias, centroTopo, centroValor) {
     off += len;
   }
   if (!tot) arcos = `<circle cx="80" cy="80" r="${Rr}" fill="none" stroke="var(--free)" stroke-width="22"/>`;
-  const leg = fatias.filter(f => f.v > 0).map(f => `<li><i style="background:${f.cor}"></i><span class="t">${esc(f.rot)}</span><span class="p">${pct(f.v, tot)}%</span><b>${R(f.v)}</b></li>`).join("");
+  const linha = f => `<i style="background:${f.cor}"></i><span class="t">${esc(f.rot)}${f.itens ? ` <small class="muted">(${f.n})</small>` : ""}</span><span class="p">${pct(f.v, tot)}%</span><b>${R(f.v)}</b>`;
+  const leg = fatias.filter(f => f.v > 0).map(f => f.itens
+    ? `<li class="abre"><details><summary>${linha(f)}</summary><ul class="list">${f.itens}</ul></details></li>`
+    : `<li>${linha(f)}</li>`).join("");
   return `<div class="donut"><svg viewBox="0 0 160 160" role="img" aria-label="${esc(centroTopo)} ${R(centroValor)}">${arcos}
     <text x="80" y="74" text-anchor="middle" class="dt">${esc(centroTopo)}</text><text x="80" y="94" text-anchor="middle" class="dv">${R(centroValor).replace(/,\d\d$/, "")}</text></svg>
     <ul class="dleg num">${leg}</ul></div>`;
@@ -370,10 +373,18 @@ function telaGraficos() {
   for (const i of r.its) porCat[i.cat || "Outros"] = (porCat[i.cat || "Outros"] || 0) + i.valor;
   const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
   const top = cats.slice(0, 7), resto = cats.slice(7).reduce((s, x) => s + x[1], 0);
-  const fat = top.map(([cat, v], i) => ({ rot: cat, v, cor: CORES_CAT[i] }));
-  if (resto) fat.push({ rot: "Outras categorias", v: resto, cor: CORES_CAT[7] });
+  const cs0 = cartoes();
+  const itemCat = (i, mostrarCat) => {
+    const onde = i.forma === "credito" ? esc(nomeCartao(i.cartao)) + (i.parcela ? " · parc. " + i.parcela : "") : i.k === "fixa" ? "conta fixa Pix" : (FORMAS[i.forma] || "Pix");
+    const quando = i.k === "fixa" && i.forma !== "credito" ? (i.dia ? "dia " + i.dia : "sem vencimento") : dataBR(i.data);
+    const act = i.k === "fixa" ? `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${i.mesRef}"` : `data-act="edit" data-id="${i.rec.id}"`;
+    return li(esc(i.desc), R(i.valor), { act, sub: quando + " · " + onde + (mostrarCat ? " · " + esc(i.cat || "Outros") : "") });
+  };
+  const itensDe = (lista, mostrarCat) => lista.sort((a, b) => b.valor - a.valor).map(i => itemCat(i, mostrarCat)).join("");
+  const fat = top.map(([cat, v], i) => { const its = r.its.filter(x => (x.cat || "Outros") === cat); return { rot: cat, v, cor: CORES_CAT[i], n: its.length, itens: itensDe(its, false) }; });
+  if (resto) { const nomes = new Set(cats.slice(7).map(x => x[0])); const its = r.its.filter(x => nomes.has(x.cat || "Outros")); fat.push({ rot: "Outras categorias", v: resto, cor: CORES_CAT[7], n: its.length, itens: itensDe(its, true) }); }
   h += `<section><h2>Gastos por categoria</h2><div class="card">${rosca(fat, "Total", soma(r.its))}
-    <span class="small muted">Contas fixas, faturas e gastos do mês, pela categoria de cada um.</span></div></section>`;
+    <span class="small muted">Toque numa categoria para ver os lançamentos dela. Contas fixas, faturas e gastos do mês, pela categoria de cada um.</span></div></section>`;
 
   // 3. próximos 6 meses
   const ms = [];

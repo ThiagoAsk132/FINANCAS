@@ -180,6 +180,14 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .bars{width:100%;height:auto;overflow:visible}
 .bars .bx{font-size:11px;fill:var(--muted)}
 .bars .bn{font-size:10.5px;font-weight:700}
+.dleg li.abre{display:block;padding:0}
+.dleg li.abre summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:12px 1fr auto auto 12px;gap:10px;align-items:center;padding:7px 0}
+.dleg li.abre summary::-webkit-details-marker{display:none}
+.dleg li.abre summary::after{content:"▸";color:var(--muted);font-size:.8rem}
+.dleg li.abre details[open] summary::after{content:"▾"}
+.dleg li.abre ul.list{margin:0 0 8px 22px;padding:0 10px;background:var(--surface2);border-radius:10px;font-size:.88rem}
+.dleg li.abre ul.list li{display:flex;border-bottom:1px solid var(--line);padding:9px 0}
+.dleg li.abre ul.list li:last-child{border-bottom:none}
 </style>
 </head>
 <body>
