@@ -169,8 +169,8 @@ function render() {
   if (ae && $("main").contains(ae) && /^(INPUT|SELECT)$/.test(ae.tagName)) { renderPendente = true; return; }
   renderPendente = false;
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === aba ? "page" : "false"));
-  $("fab").hidden = aba === "ajustes";
-  const html = { mes: telaMes, fixas: telaFixas, planejar: telaPlanejar, ajustes: telaAjustes }[aba]();
+  $("fab").hidden = aba === "ajustes" || aba === "graficos";
+  const html = { mes: telaMes, graficos: telaGraficos, fixas: telaFixas, planejar: telaPlanejar, ajustes: telaAjustes }[aba]();
   $("main").innerHTML = html;
   renderSync();
 }
@@ -183,100 +183,216 @@ function avisoArquivo() {
     <div class="row"><button class="btn primary" data-act="criar-arq">Criar arquivo da casa</button><button class="btn" data-act="sync">Procurar de novo</button></div></div>`;
   return "";
 }
+const mesbar = m => `<div class="mesbar"><button class="icon" data-act="mes" data-d="-1" aria-label="Mês anterior">‹</button><strong>${nomeMes(m)}</strong><button class="icon" data-act="mes" data-d="1" aria-label="Próximo mês">›</button></div>`;
+const R0 = c => "R$ " + Math.round((c || 0) / 100).toLocaleString("pt-BR");
+const Maius = s => s.replace(/^./, x => x.toUpperCase());
+
+function linhaFixaPix(i, m, hoje) {
+  const atrasada = !i.pago && i.dia && i.data < hoje;
+  return li(esc(i.desc), R(i.valor), {
+    pre: `<button type="button" class="chk${i.pago ? " on" : ""}" data-act="pago" data-id="${i.rec.id}" data-mes="${m}" aria-label="${i.pago ? "Marcar como não paga" : "Marcar como paga"}: ${esc(i.desc)}" aria-pressed="${i.pago}">${ICON_OK}</button>`,
+    act: `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${m}"`,
+    sub: (!i.dia ? "sem vencimento" : atrasada ? `<span style="color:var(--danger);font-weight:600">venceu dia ${i.dia}</span>` : "vence dia " + i.dia) + " · " + esc(i.cat || "")
+  });
+}
+
 function telaMes() {
   const m = mesSel, r = resumo(m), c = cfg();
   const vazio = !todos("renda").length && !todos("fixa").length && !todos("gasto").length;
-  let h = avisoArquivo();
-  h += `<div class="mesbar"><button class="icon" data-act="mes" data-d="-1" aria-label="Mês anterior">‹</button><strong>${nomeMes(m)}</strong><button class="icon" data-act="mes" data-d="1" aria-label="Próximo mês">›</button></div>`;
+  let h = avisoArquivo() + mesbar(m);
   if (vazio) h += `<div class="alert info"><strong>Primeiros passos</strong><ol class="steps small">
     <li>Em <b>Ajustes</b>: os nomes de vocês e os cartões de crédito (dia do fechamento e do vencimento).</li>
     <li>Em <b>Fixas</b>: as rendas (salários) e todas as contas fixas, dizendo se cada uma é paga no Pix ou no crédito.</li>
     <li>Em <b>Planejar</b>: quanto querem guardar por mês.</li>
     <li>No dia a dia: <b>+ Lançar</b> cada gasto que não é fixo.</li></ol></div>`;
 
-  // destaque: quanto ainda pode gastar
+  // ----- resumo do mês
   const ehAtual = m === mesAtual();
   const restam = ehAtual ? diasNoMes(m) - +hojeISO().slice(8, 10) + 1 : 0;
-  const totBar = Math.max(r.ent, r.pixFix + r.pixVar + r.fat + r.meta, 1);
+  const sai = r.pixFix + r.pixVar + r.fat;
+  const totBar = Math.max(r.ent, sai + r.meta, 1);
   const w = v => (Math.max(v, 0) / totBar * 100).toFixed(2) + "%";
-  h += `<section class="hero"><span class="label">${r.livre >= 0 ? "Ainda pode gastar em " + soMes(m) : "Passou do planejado em " + soMes(m)}</span>`;
+  h += `<section class="hero"><span class="label">${r.livre >= 0 ? "Pode gastar em " + soMes(m) : "Passou do planejado em " + soMes(m)}</span>`;
   if (!r.ent) h += `<div class="big num">—</div><span class="small muted">Cadastre as rendas na aba Fixas para o app calcular.</span>`;
   else {
-    h += `<div class="big num${r.livre < 0 ? " neg" : ""}">${R(Math.abs(r.livre))}</div>`;
-    if (ehAtual && r.livre > 0) h += `<span class="small muted">≈ ${R(Math.floor(r.livre / restam))} por dia nos ${restam} dias que faltam · já descontado o que vão guardar</span>`;
-    else if (r.livre < 0) h += `<span class="small muted">As saídas e a meta de guardar passam da renda do mês. Veja abaixo onde cortar ou reduza a meta.</span>`;
+    h += `<div class="big num${r.livre < 0 ? " neg" : ""}">${r.livre < 0 ? "−" : ""}${R(Math.abs(r.livre))}</div>`;
+    if (ehAtual && r.livre > 0) h += `<span class="small muted">≈ <b>${R(Math.floor(r.livre / restam))} por dia</b> nos ${restam} dias que faltam</span>`;
+    else if (r.livre < 0) h += `<span class="small muted">As contas, o cartão e a meta de guardar passam da renda do mês.</span>`;
   }
-  h += `<div class="stack" aria-hidden="true"><span style="width:${w(r.pixFix)};background:var(--pix)"></span><span style="width:${w(r.pixVar)};background:var(--pix);opacity:.55"></span><span style="width:${w(r.fat)};background:var(--cred)"></span><span style="width:${w(r.meta)};background:var(--save)"></span></div>
-    <div class="legend num"><span><i style="background:var(--pix)"></i>Fixas Pix <b>${R(r.pixFix)}</b></span><span><i style="background:var(--pix);opacity:.55"></i>Gastos Pix/débito <b>${R(r.pixVar)}</b></span><span><i style="background:var(--cred)"></i>Cartão <b>${R(r.fat)}</b></span><span><i style="background:var(--save)"></i>Guardar <b>${R(r.meta)}</b></span><span><i style="background:var(--free)"></i>Livre <b>${R(Math.max(r.livre, 0))}</b></span><span>de uma renda de <b>${R(r.ent)}</b></span></div>`;
+  h += `<div class="tiles num"><div><span>Entra</span><b class="pos">${R0(r.ent)}</b></div><div><span>Sai</span><b>${R0(sai)}</b></div><div><span>Guardar</span><b class="sv">${R0(r.meta)}</b></div></div>`;
+  h += `<div class="stack" aria-hidden="true"><span style="width:${w(r.pixFix)};background:var(--pix)"></span><span style="width:${w(r.fat)};background:var(--cred)"></span><span style="width:${w(r.pixVar)};background:var(--warn)"></span><span style="width:${w(r.meta)};background:var(--save)"></span></div>
+    <div class="legend num"><span><i style="background:var(--pix)"></i>Contas Pix</span><span><i style="background:var(--cred)"></i>Cartão</span>${r.pixVar ? `<span><i style="background:var(--warn)"></i>Dia a dia</span>` : ""}<span><i style="background:var(--save)"></i>Guardar</span><span><i style="background:var(--free)"></i>Livre</span></div>`;
+  if (r.ent) h += `<span class="small muted">${pct(sai + r.meta, r.ent)}% da renda já tem destino.</span>`;
+  h += `</section>`;
+
+  // ----- mês que vem (atalho)
   const prox = addMes(m, 1), r2 = resumo(prox);
-  h += `<div class="next num"><span>${soMes(prox).replace(/^./, x => x.toUpperCase())}: já comprometido <b>${R(r2.pixFix + r2.fat)}</b></span><span>livre <b style="color:${r2.livre < 0 ? "var(--danger)" : "var(--save)"}">${R(r2.livre)}</b></span></div>
-    <span class="small muted">Compras no crédito feitas agora caem nas faturas dos próximos meses — por isso o mês que vem já aparece aqui.</span></section>`;
+  h += `<button type="button" class="nextcard num" data-act="mes" data-d="1"><span><span class="label">${Maius(soMes(prox))}</span><br>já comprometido <b>${R(r2.pixFix + r2.pixVar + r2.fat)}</b></span><span class="nv">livre <b style="color:${r2.livre < 0 ? "var(--danger)" : "var(--save)"}">${R(r2.livre)}</b> ›</span></button>`;
 
-  // entradas
-  h += `<section><h2>Entradas <small class="num">${R(r.ent)}</small></h2><div class="card flat"><ul class="list">`;
-  if (!r.ents.length) h += `<li class="empty" style="display:block">Nenhuma renda neste mês.</li>`;
-  for (const e of r.ents) {
-    if (e.k === "renda") h += li(esc(e.desc), R(e.valor), { act: `data-act="renda-mes" data-id="${e.rec.id}"`, sub: esc(nomeP(e.pessoa)) + " · " + quandoRenda(e.rec, m) + (e.ajustado ? " · valor ajustado neste mês" : ""), cls: "pos" });
-    else h += li(esc(e.desc), R(e.valor), { act: `data-act="edit" data-id="${e.rec.id}"`, sub: dataBR(e.data) + " · " + esc(nomeP(e.pessoa)) + " · entrada avulsa", cls: "pos" });
-  }
-  h += `</ul></div></section>`;
-
-  // Pix e débito
-  const pix = r.its.filter(i => i.forma !== "credito").sort((a, b) => (a.k === b.k ? 0 : a.k === "fixa" ? -1 : 1) || a.data.localeCompare(b.data));
-  const fixPix = pix.filter(i => i.k === "fixa"), pagas = fixPix.filter(i => i.pago).length;
-  h += `<section><h2>Pix e débito <small class="num">${R(r.pixFix + r.pixVar)}</small></h2>`;
-  if (fixPix.length) h += `<span class="small muted">${pagas} de ${fixPix.length} contas fixas pagas · falta pagar ${R(soma(fixPix.filter(i => !i.pago)))}</span>`;
-  h += `<div class="card flat"><ul class="list">`;
-  if (!pix.length) h += `<li class="empty" style="display:block">Nada no Pix ou débito neste mês.</li>`;
+  // ----- contas fixas no Pix
   const hoje = hojeISO();
-  for (const i of pix) {
-    if (i.k === "fixa") {
-      const atrasada = !i.pago && i.dia && i.data < hoje;
-      h += li(esc(i.desc), R(i.valor), {
-        pre: `<button type="button" class="chk${i.pago ? " on" : ""}" data-act="pago" data-id="${i.rec.id}" data-mes="${m}" aria-label="${i.pago ? "Marcar como não paga" : "Marcar como paga"}: ${esc(i.desc)}" aria-pressed="${i.pago}">${ICON_OK}</button>`,
-        act: `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${m}"`,
-        sub: (!i.dia ? "sem vencimento" : atrasada ? `<span style="color:var(--danger);font-weight:600">venceu dia ${i.dia}</span>` : "vence dia " + i.dia) + " · " + esc(i.cat || "")
-      });
-    } else h += li(esc(i.desc), R(i.valor), { act: `data-act="edit" data-id="${i.rec.id}"`, sub: dataBR(i.data) + " · " + esc(i.cat || "") + " · " + FORMAS[i.forma] + " · " + esc(nomeP(i.rec.pessoa)) });
+  const fixPix = r.its.filter(i => i.forma !== "credito" && i.k === "fixa").sort((a, b) => (a.dia || 99) - (b.dia || 99));
+  const abertas = fixPix.filter(i => !i.pago), pagas = fixPix.filter(i => i.pago);
+  if (fixPix.length) {
+    h += `<section><h2>Contas no Pix <small class="num">${abertas.length ? "falta pagar " + R(soma(abertas)) : "tudo pago"}</small></h2>`;
+    if (abertas.length) { h += `<div class="card flat"><ul class="list">`; for (const i of abertas) h += linhaFixaPix(i, m, hoje); h += `</ul></div>`; }
+    else h += `<div class="card okcard"><b>✓ Todas as ${fixPix.length} contas do mês estão pagas.</b></div>`;
+    if (pagas.length) {
+      h += `<details class="card flat dobra"><summary><span>Já pagas (${pagas.length})</span><b class="num">${R(soma(pagas))}</b></summary><ul class="list">`;
+      for (const i of pagas) h += linhaFixaPix(i, m, hoje);
+      h += `</ul></details>`;
+    }
+    h += `</section>`;
   }
-  h += `</ul></div></section>`;
 
-  // cartões
+  // ----- faturas
   const cred = r.its.filter(i => i.forma === "credito"), porCartao = {};
   for (const i of cred) (porCartao[i.cartao] ||= []).push(i);
-  h += `<section><h2>Cartão de crédito <small class="num">${R(r.fat)}</small></h2>`;
+  h += `<section><h2>Faturas do cartão <small class="num">${R(r.fat)}</small></h2>`;
   if (!cred.length) h += `<div class="card"><span class="empty">Nenhuma fatura vencendo em ${soMes(m)}.</span></div>`;
   const cs = cartoes();
   for (const [cid, its] of Object.entries(porCartao)) {
     its.sort((a, b) => a.data.localeCompare(b.data));
-    h += `<details class="fatura"><summary><span><b>${esc(nomeCartao(cid))}</b><br><span class="small muted">fatura vence ${dataBR(vencData(m, cs[cid]))} · ${its.length} ${its.length === 1 ? "item" : "itens"}</span></span><b class="num">${R(soma(its))}</b></summary><div class="in"><ul class="list">`;
+    h += `<details class="fatura"><summary><span><b>${esc(nomeCartao(cid))}</b><br><span class="small muted">vence ${dataBR(vencData(m, cs[cid]))} · ${its.length} ${its.length === 1 ? "item" : "itens"} · toque para ver</span></span><b class="num">${R(soma(its))}</b></summary><div class="in"><ul class="list">`;
     for (const i of its) {
       if (i.k === "fixa") h += li(esc(i.desc), R(i.valor), { act: `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${i.mesRef}"`, sub: "conta fixa · cobra dia " + (i.rec.dia || 1) + " · " + esc(i.cat || "") });
-      else h += li(esc(i.desc) + (i.parcela ? ` <span class="tag cred">${i.parcela}</span>` : ""), R(i.valor), { act: `data-act="edit" data-id="${i.rec.id}"`, sub: "compra " + dataBR(i.data) + " · " + esc(i.cat || "") + " · " + esc(nomeP(i.rec.pessoa)) + (i.parcela ? " · total " + R(i.rec.valor) : "") });
+      else h += li(esc(i.desc) + (i.parcela ? ` <span class="tag cred">${i.parcela}</span>` : ""), R(i.valor), { act: `data-act="edit" data-id="${i.rec.id}"`, sub: "compra " + dataBR(i.data) + " · " + esc(i.cat || "") + (i.parcela ? " · total " + R(i.rec.valor) : "") });
     }
     h += `</ul></div></details>`;
   }
   h += `</section>`;
 
-  // por categoria
+  // ----- gastos do dia a dia (Pix/débito avulsos)
+  const varPix = r.its.filter(i => i.forma !== "credito" && i.k === "gasto").sort((a, b) => b.data.localeCompare(a.data));
+  h += `<section><h2>Gastos do dia a dia <small class="num">${R(r.pixVar)}</small></h2>`;
+  if (!varPix.length) h += `<div class="card"><span class="empty">Nada lançado no Pix ou débito. Toque em <b>+ Lançar</b> a cada gasto (mercado, combustível, farmácia…).</span></div>`;
+  else { h += `<div class="card flat"><ul class="list">`; for (const i of varPix) h += li(esc(i.desc), R(i.valor), { act: `data-act="edit" data-id="${i.rec.id}"`, sub: dataBR(i.data) + " · " + esc(i.cat || "") + " · " + FORMAS[i.forma] + " · " + esc(nomeP(i.rec.pessoa)) }); h += `</ul></div>`; }
+  h += `</section>`;
+
+  // ----- limites (só as categorias com teto)
   const porCat = {};
   for (const i of r.its) porCat[i.cat || "Outros"] = (porCat[i.cat || "Outros"] || 0) + i.valor;
-  const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
-  if (cats.length) {
-    h += `<section><h2>Por categoria</h2><div class="card">`;
-    const maior = cats[0][1];
-    for (const [cat, v] of cats) {
-      const lim = c.limites[cat] || 0, ref = lim || maior, over = lim && v > lim;
-      h += `<div class="catrow num"><span>${esc(cat)}</span><span>${R(v)}${lim ? ` <span class="muted small">de ${R(lim)}</span>` : ""}</span><div class="bar"><span class="${over ? "over" : ""}" style="width:${Math.min(100, v / ref * 100).toFixed(1)}%"></span></div></div>`;
+  const lims = Object.entries(c.limites).filter(([, v]) => v > 0);
+  if (lims.length) {
+    h += `<section><h2>Limites do mês</h2><div class="card">`;
+    for (const [cat, lim] of lims) {
+      const v = porCat[cat] || 0, over = v > lim;
+      h += `<div class="catrow num"><span>${esc(cat)}</span><span><b>${R(v)}</b> <span class="muted small">de ${R(lim)}</span></span><div class="bar"><span class="${over ? "over" : ""}" style="width:${Math.min(100, v / lim * 100).toFixed(1)}%"></span></div><span class="small muted" style="grid-column:1/-1">${over ? `<span style="color:var(--danger);font-weight:600">Passou ${R(v - lim)}</span>` : "Ainda pode " + R(lim - v)}</span></div>`;
     }
-    h += `<span class="small muted">Limites por categoria: aba Planejar.</span></div></section>`;
+    h += `</div></section>`;
   }
+  h += `<button type="button" class="btn" data-act="ir-aba" data-tab="graficos">Ver gráficos do mês</button>`;
 
-  // guardado
+  // ----- entradas (recolhidas)
+  h += `<details class="card flat dobra"><summary><span>Entradas</span><b class="num pos">${R(r.ent)}</b></summary><ul class="list">`;
+  if (!r.ents.length) h += `<li class="empty" style="display:block">Nenhuma renda neste mês.</li>`;
+  for (const e of r.ents) {
+    if (e.k === "renda") h += li(esc(e.desc), R(e.valor), { act: `data-act="renda-mes" data-id="${e.rec.id}"`, sub: esc(nomeP(e.pessoa)) + " · " + quandoRenda(e.rec, m) + (e.ajustado ? " · valor ajustado neste mês" : ""), cls: "pos" });
+    else h += li(esc(e.desc), R(e.valor), { act: `data-act="edit" data-id="${e.rec.id}"`, sub: dataBR(e.data) + " · " + esc(nomeP(e.pessoa)) + " · entrada avulsa", cls: "pos" });
+  }
+  h += `</ul></details>`;
+
+  // ----- guardado
   const gd = vivo(reg["gd|" + m]) ? reg["gd|" + m].valor : null;
   h += `<section><h2>Guardar <small class="num">meta ${R(r.meta)}</small></h2><div class="card">
     <label class="field"><span class="label">Quanto guardaram de fato em ${soMes(m)}</span><input inputmode="decimal" data-chg="guardado" data-mes="${m}" placeholder="R$ 0,00" value="${gd != null ? valorCampo(gd) : ""}"></label>
     <span class="small muted">${gd == null ? "Dica: transfira a meta para a reserva no dia em que o salário cai, antes de gastar." : gd >= r.meta ? "Meta do mês cumprida." : "Faltam " + R(r.meta - gd) + " para a meta do mês."}</span></div></section>`;
+  return h;
+}
+
+// ---------- aba Gráficos ----------
+// rosca em SVG: fatias = [{rot, v, cor}]; folga de 2px entre as fatias
+function rosca(fatias, centroTopo, centroValor) {
+  const tot = fatias.reduce((s, f) => s + Math.max(f.v, 0), 0);
+  const Rr = 64, C = 2 * Math.PI * Rr, gap = fatias.filter(f => f.v > 0).length > 1 ? 3 : 0;
+  let off = 0, arcos = "";
+  for (const f of fatias) {
+    if (!(f.v > 0) || !tot) continue;
+    const len = f.v / tot * C;
+    arcos += `<circle cx="80" cy="80" r="${Rr}" fill="none" stroke="${f.cor}" stroke-width="22" stroke-dasharray="${Math.max(len - gap, 0.5).toFixed(2)} ${(C - Math.max(len - gap, 0.5)).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 80 80)"><title>${esc(f.rot)}: ${R(f.v)} (${pct(f.v, tot)}%)</title></circle>`;
+    off += len;
+  }
+  if (!tot) arcos = `<circle cx="80" cy="80" r="${Rr}" fill="none" stroke="var(--free)" stroke-width="22"/>`;
+  const leg = fatias.filter(f => f.v > 0).map(f => `<li><i style="background:${f.cor}"></i><span class="t">${esc(f.rot)}</span><span class="p">${pct(f.v, tot)}%</span><b>${R(f.v)}</b></li>`).join("");
+  return `<div class="donut"><svg viewBox="0 0 160 160" role="img" aria-label="${esc(centroTopo)} ${R(centroValor)}">${arcos}
+    <text x="80" y="74" text-anchor="middle" class="dt">${esc(centroTopo)}</text><text x="80" y="94" text-anchor="middle" class="dv">${R(centroValor).replace(/,\d\d$/, "")}</text></svg>
+    <ul class="dleg num">${leg}</ul></div>`;
+}
+
+// barras empilhadas por mês: meses=[{rot, partes:[{rot,v,cor}], ref, nota, notaCor}]
+function barras(meses, legenda) {
+  const W = 340, H = 190, top = 14, base = 150, n = meses.length, bw = 30, passo = W / n;
+  const max = Math.max(1, ...meses.map(m => Math.max(m.ref || 0, m.partes.reduce((s, p) => s + Math.max(p.v, 0), 0))));
+  const y = v => base - v / max * (base - top);
+  let g = `<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--line)"/>`;
+  meses.forEach((m, i) => {
+    const x = i * passo + (passo - bw) / 2;
+    let acc = 0;
+    const vis = m.partes.filter(p => p.v > 0);
+    vis.forEach((p, j) => {
+      const y0 = y(acc), y1 = y(acc + p.v), hgt = Math.max(y0 - y1 - (j < vis.length - 1 ? 2 : 0), 0.5);
+      const ult = j === vis.length - 1;
+      g += ult ? `<path d="M${x} ${y1 + hgt}V${y1 + 4}a4 4 0 0 1 4 -4h${bw - 8}a4 4 0 0 1 4 4V${y1 + hgt}Z" fill="${p.cor}"><title>${m.rot} · ${esc(p.rot)}: ${R(p.v)}</title></path>`
+        : `<rect x="${x}" y="${y1}" width="${bw}" height="${hgt}" fill="${p.cor}"><title>${m.rot} · ${esc(p.rot)}: ${R(p.v)}</title></rect>`;
+      acc += p.v;
+    });
+    if (m.ref) g += `<line x1="${x - 5}" x2="${x + bw + 5}" y1="${y(m.ref)}" y2="${y(m.ref)}" stroke="var(--fg)" stroke-width="2" stroke-dasharray="3 2"><title>${m.rot} · renda ${R(m.ref)}</title></line>`;
+    g += `<text x="${x + bw / 2}" y="${base + 16}" text-anchor="middle" class="bx">${m.rot}</text>`;
+    if (m.nota) g += `<text x="${x + bw / 2}" y="${base + 32}" text-anchor="middle" class="bn" style="fill:${m.notaCor || "var(--fg)"}">${m.nota}</text>`;
+  });
+  const leg = legenda.map(l => `<span><i style="background:${l.cor}${l.tracejado ? ";height:3px;border-radius:0" : ""}"></i>${esc(l.rot)}</span>`).join("");
+  return `<svg class="bars" viewBox="0 0 ${W} ${H}" role="img">${g}</svg><div class="legend">${leg}</div>`;
+}
+const mil = v => { const a = Math.abs(v) / 100; return (v < 0 ? "−" : "") + (a >= 1000 ? (a / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil" : Math.round(a)); };
+const CORES_CAT = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c6)", "var(--c7)", "var(--c8)"];
+
+function telaGraficos() {
+  const m = mesSel, r = resumo(m);
+  let h = mesbar(m);
+  if (!r.ent && !r.its.length) return h + `<div class="card"><span class="empty">Sem dados neste mês ainda.</span></div>`;
+
+  // 1. renda dividida
+  const falta = r.livre < 0 ? -r.livre : 0;
+  h += `<section><h2>Para onde vai a renda</h2><div class="card">${rosca([
+    { rot: "Contas no Pix", v: r.pixFix, cor: "var(--pix)" },
+    { rot: "Faturas do cartão", v: r.fat, cor: "var(--cred)" },
+    { rot: "Gastos do dia a dia", v: r.pixVar, cor: "var(--warn)" },
+    { rot: "Guardar", v: r.meta, cor: "var(--save)" },
+    { rot: "Livre para gastar", v: Math.max(r.livre, 0), cor: "var(--free)" }
+  ], "Renda", r.ent)}
+  ${falta ? `<span class="small" style="color:var(--danger);font-weight:600">Faltam ${R(falta)} para fechar o mês.</span>` : ""}</div></section>`;
+
+  // 2. por categoria (as 7 maiores + "Outras")
+  const porCat = {};
+  for (const i of r.its) porCat[i.cat || "Outros"] = (porCat[i.cat || "Outros"] || 0) + i.valor;
+  const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
+  const top = cats.slice(0, 7), resto = cats.slice(7).reduce((s, x) => s + x[1], 0);
+  const fat = top.map(([cat, v], i) => ({ rot: cat, v, cor: CORES_CAT[i] }));
+  if (resto) fat.push({ rot: "Outras categorias", v: resto, cor: CORES_CAT[7] });
+  h += `<section><h2>Gastos por categoria</h2><div class="card">${rosca(fat, "Total", soma(r.its))}
+    <span class="small muted">Contas fixas, faturas e gastos do mês, pela categoria de cada um.</span></div></section>`;
+
+  // 3. próximos 6 meses
+  const ms = [];
+  for (let i = 0; i < 6; i++) {
+    const k = addMes(m, i), x = resumo(k);
+    ms.push({ rot: curtoMes(k).slice(0, 3), ref: x.ent, nota: mil(x.livre), notaCor: x.livre < 0 ? "var(--danger)" : "var(--save)",
+      partes: [{ rot: "Contas Pix", v: x.pixFix + x.pixVar, cor: "var(--pix)" }, { rot: "Cartão", v: x.fat, cor: "var(--cred)" }, { rot: "Guardar", v: x.meta, cor: "var(--save)" }] });
+  }
+  h += `<section><h2>Próximos 6 meses</h2><div class="card">${barras(ms, [{ rot: "Contas Pix", cor: "var(--pix)" }, { rot: "Cartão", cor: "var(--cred)" }, { rot: "Guardar", cor: "var(--save)" }, { rot: "Renda", cor: "var(--fg)", tracejado: true }])}
+    <span class="small muted">A linha tracejada é a renda. O número embaixo de cada mês é quanto sobra livre (em reais). Barra acima da linha = mês no vermelho.</span></div></section>`;
+
+  // 4. faturas por cartão
+  const cs = todos("cartao").sort((a, b) => a.nome.localeCompare(b.nome));
+  if (cs.length) {
+    const fs = [];
+    for (let i = 0; i < 6; i++) {
+      const k = addMes(m, i), its = itensMes(k).filter(x => x.forma === "credito");
+      fs.push({ rot: curtoMes(k).slice(0, 3), nota: mil(soma(its)), partes: cs.map((c, j) => ({ rot: c.nome, v: soma(its.filter(x => x.cartao === c.id)), cor: CORES_CAT[j % 8] })) });
+    }
+    h += `<section><h2>Faturas dos próximos meses</h2><div class="card">${barras(fs, cs.map((c, j) => ({ rot: c.nome, cor: CORES_CAT[j % 8] })))}
+      <span class="small muted">Só o que já foi lançado (parcelas e contas fixas no cartão). Compras novas aumentam esses valores.</span></div></section>`;
+  }
   return h;
 }
 
@@ -690,6 +806,7 @@ $("main").addEventListener("click", async e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const a = b.dataset.act, id = b.dataset.id;
   if (a === "mes") { mesSel = addMes(mesSel, +b.dataset.d); render(); }
+  else if (a === "ir-aba") { aba = b.dataset.tab; loc.gravar("aba", aba); render(); window.scrollTo(0, 0); }
   else if (a === "edit") editar(id);
   else if (a === "fixa-mes") formFixaMes(id, b.dataset.mes);
   else if (a === "renda-mes") formRendaMes(id, mesSel);

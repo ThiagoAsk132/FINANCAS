@@ -21,6 +21,7 @@
   --save:#2F7D3A; --save-soft:#E2F2E4; --warn:#A86200; --warn-soft:#FCEFD9;
   --danger:#B3261E; --danger-soft:#FBE4E2; --free:#C9D4CF;
   --pa:#2F5DA8; --pb:#B0427A;
+  --c1:#2a78d6;--c2:#eb6834;--c3:#1baf7a;--c4:#eda100;--c5:#e87ba4;--c6:#008300;--c7:#6250d6;--c8:#e34948;
   --r:14px;
   color-scheme:light;
 }
@@ -30,14 +31,14 @@
   --pix:#4CC3CC; --pix-soft:#143236; --cred:#A88BEA; --cred-soft:#2A2340;
   --save:#6FCB7B; --save-soft:#183322; --warn:#F0A640; --warn-soft:#3A2A12;
   --danger:#F2867E; --danger-soft:#3D1D1B; --free:#3A4742;
-  --pa:#82A7EC; --pb:#E58AB8; color-scheme:dark}}
+  --pa:#82A7EC; --pb:#E58AB8; --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#0ca30c;--c7:#9085e9;--c8:#e66767; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0F1513; --surface:#18201D; --surface2:#1D2723; --line:#2B3632; --fg:#E5EDE9; --muted:#97A7A0;
   --accent:#4FC2A8; --accent-ink:#0B1A16; --accent-soft:#16312B;
   --pix:#4CC3CC; --pix-soft:#143236; --cred:#A88BEA; --cred-soft:#2A2340;
   --save:#6FCB7B; --save-soft:#183322; --warn:#F0A640; --warn-soft:#3A2A12;
   --danger:#F2867E; --danger-soft:#3D1D1B; --free:#3A4742;
-  --pa:#82A7EC; --pb:#E58AB8; color-scheme:dark}
+  --pa:#82A7EC; --pb:#E58AB8; --c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;--c6:#0ca30c;--c7:#9085e9;--c8:#e66767; color-scheme:dark}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,system-ui,sans-serif}
@@ -137,7 +138,7 @@ input,select{background:var(--surface2);border:1px solid var(--line);border-radi
 .tips{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:.93rem}
 
 #fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:6;border:none;border-radius:999px;padding:14px 20px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:1rem;box-shadow:0 6px 18px rgba(0,0,0,.22)}
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:4px max(6px,env(safe-area-inset-right,0px)) calc(4px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:4px max(6px,env(safe-area-inset-right,0px)) calc(4px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
 nav.tabs button{border:none;background:none;padding:8px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.72rem;color:var(--muted);border-radius:10px}
 nav.tabs button svg{width:24px;height:24px}
 nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:700}
@@ -151,6 +152,33 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .sheet .acts .right{display:flex;gap:8px;margin-left:auto}
 .err{color:var(--danger);font-size:.88rem}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.92rem;max-width:90vw;text-align:center}
+
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tiles div{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;min-width:0}
+.tiles span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.tiles b{font-size:.98rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tiles b.pos{color:var(--save)} .tiles b.sv{color:var(--save)}
+.nextcard{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:12px 14px;font-size:.92rem}
+.nextcard .nv{white-space:nowrap}
+.okcard{background:var(--save-soft);border-color:var(--save);color:var(--fg)}
+.dobra summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:10px;padding:12px 0;font-weight:600}
+.dobra summary::-webkit-details-marker{display:none}
+.dobra summary span::before{content:"▸ ";color:var(--muted)}
+.dobra[open] summary span::before{content:"▾ "}
+.pos{color:var(--save)}
+.donut{display:flex;flex-direction:column;align-items:center;gap:12px}
+.donut svg{width:min(220px,70vw);height:auto}
+.donut .dt{font-size:11px;fill:var(--muted)}
+.donut .dv{font-size:17px;font-weight:700;fill:var(--fg)}
+.dleg{list-style:none;margin:0;padding:0;width:100%;display:flex;flex-direction:column}
+.dleg li{display:grid;grid-template-columns:12px 1fr auto auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:.9rem}
+.dleg li:last-child{border-bottom:none}
+.dleg i{width:12px;height:12px;border-radius:4px}
+.dleg .t{min-width:0;overflow-wrap:anywhere}
+.dleg .p{color:var(--muted);font-size:.82rem}
+.bars{width:100%;height:auto;overflow:visible}
+.bars .bx{font-size:11px;fill:var(--muted)}
+.bars .bn{font-size:10.5px;font-weight:700}
 </style>
 </head>
 <body>
@@ -162,6 +190,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 <button id="fab" type="button">+ Lançar</button>
 <nav class="tabs" aria-label="Abas">
   <button type="button" data-tab="mes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>Mês</button>
+  <button type="button" data-tab="graficos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Gráficos</button>
   <button type="button" data-tab="fixas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M17 15.5l2 2 3-3.5"/></svg>Fixas</button>
   <button type="button" data-tab="planejar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V11M10 19V6M16 19v-5M21 19H3"/><path d="M14 8l3-3 3 3"/></svg>Planejar</button>
   <button type="button" data-tab="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
