@@ -156,9 +156,10 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.92rem;max-width:90vw;text-align:center}
 
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.tiles div{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;min-width:0}
+.tiles div{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:8px 8px;display:flex;flex-direction:column;min-width:0}
 .tiles span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
-.tiles b{font-size:.98rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tiles b{font-size:clamp(.78rem,3.8vw,1.05rem);white-space:nowrap;letter-spacing:-.01em}
+.tiles b small{font-size:.72em;font-weight:600;margin-right:1px}
 .tiles b.pos{color:var(--save)} .tiles b.sv{color:var(--save)}
 .nextcard{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:12px 14px;font-size:.92rem}
 .nextcard .nv{white-space:nowrap}
