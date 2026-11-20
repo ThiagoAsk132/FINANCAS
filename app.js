@@ -49,7 +49,7 @@ const valorCampo = c => c ? (c / 100).toLocaleString("pt-BR", { minimumFractionD
 const pct = (a, b) => b > 0 ? Math.round(a / b * 100) : 0;
 
 const CATS = ["Moradia", "Contas da casa", "Mercado", "Transporte", "Saúde", "Educação", "Filhos", "Dívidas e empréstimos",
-  "Lazer", "Restaurante e delivery", "Assinaturas", "Vestuário e cuidados", "Pets", "Presentes", "Outros"];
+  "Lazer", "Restaurante", "Delivery", "Assinaturas", "Vestuário e cuidados", "Pets", "Presentes", "Outros"];
 const NECESSIDADE = new Set(CATS.slice(0, 8));
 const FORMAS = { pix: "Pix", debito: "Débito", credito: "Crédito" };
 
@@ -563,7 +563,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 12 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 13 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
