@@ -136,7 +136,9 @@ function resumo(m) {
   const pixVar = soma(its.filter(i => i.forma !== "credito" && i.k === "gasto"));
   const fat = soma(its.filter(i => i.forma === "credito"));
   const meta = metaDe(ent);
-  return { its, ents, ent, pixFix, pixVar, fat, meta, livre: ent - pixFix - pixVar - fat - meta };
+  // a meta NÃO sai do "pode gastar": só o que foi guardado de fato no mês (Mês › Guardar) é descontado
+  const g = reg["gd|" + m], guard = vivo(g) ? (g.valor || 0) : 0;
+  return { its, ents, ent, pixFix, pixVar, fat, meta, guard, livre: ent - pixFix - pixVar - fat - guard };
 }
 // média mensal dos gastos variáveis (não fixos) nos últimos 3 meses fechados que têm lançamentos
 function mediaVariavel(m0) {
@@ -210,7 +212,7 @@ function telaMes() {
   const ehAtual = m === mesAtual();
   const restam = ehAtual ? diasNoMes(m) - +hojeISO().slice(8, 10) + 1 : 0;
   const sai = r.pixFix + r.pixVar + r.fat;
-  const totBar = Math.max(r.ent, sai + r.meta, 1);
+  const totBar = Math.max(r.ent, sai + r.guard, 1);
   const w = v => (Math.max(v, 0) / totBar * 100).toFixed(2) + "%";
   h += `<section class="hero"><span class="label">${r.livre >= 0 ? "Pode gastar em " + soMes(m) : "Passou do planejado em " + soMes(m)}</span>`;
   if (!r.ent) h += `<div class="big num">—</div><span class="small muted">Cadastre as rendas na aba Fixas para o app calcular.</span>`;
@@ -219,10 +221,10 @@ function telaMes() {
     if (ehAtual && r.livre > 0) h += `<span class="small muted">≈ <b>${R(Math.floor(r.livre / restam))} por dia</b> nos ${restam} dias que faltam</span>`;
     else if (r.livre < 0) h += `<span class="small muted">As contas, o cartão e a meta de guardar passam da renda do mês.</span>`;
   }
-  h += `<div class="tiles num"><div><span>Entra</span><b class="pos">${R0(r.ent)}</b></div><div><span>Sai</span><b>${R0(sai)}</b></div><div><span>Guardar</span><b class="sv">${R0(r.meta)}</b></div></div>`;
-  h += `<div class="stack" aria-hidden="true"><span style="width:${w(r.pixFix)};background:var(--pix)"></span><span style="width:${w(r.fat)};background:var(--cred)"></span><span style="width:${w(r.pixVar)};background:var(--warn)"></span><span style="width:${w(r.meta)};background:var(--save)"></span></div>
-    <div class="legend num"><span><i style="background:var(--pix)"></i>Contas Pix</span><span><i style="background:var(--cred)"></i>Cartão</span>${r.pixVar ? `<span><i style="background:var(--warn)"></i>Débito/Pix</span>` : ""}<span><i style="background:var(--save)"></i>Guardar</span><span><i style="background:var(--free)"></i>Livre</span></div>`;
-  if (r.ent) h += `<span class="small muted">${pct(sai + r.meta, r.ent)}% da renda já tem destino.</span>`;
+  h += `<div class="tiles num"><div><span>Entra</span><b class="pos">${R0(r.ent)}</b></div><div><span>Sai</span><b>${R0(sai)}</b></div><div><span>Guardado</span><b class="sv">${R0(r.guard)}</b></div></div>`;
+  h += `<div class="stack" aria-hidden="true"><span style="width:${w(r.pixFix)};background:var(--pix)"></span><span style="width:${w(r.fat)};background:var(--cred)"></span><span style="width:${w(r.pixVar)};background:var(--warn)"></span><span style="width:${w(r.guard)};background:var(--save)"></span></div>
+    <div class="legend num"><span><i style="background:var(--pix)"></i>Contas Pix</span><span><i style="background:var(--cred)"></i>Cartão</span>${r.pixVar ? `<span><i style="background:var(--warn)"></i>Débito/Pix</span>` : ""}<span><i style="background:var(--save)"></i>Guardado</span><span><i style="background:var(--free)"></i>Livre</span></div>`;
+  if (r.ent) h += `<span class="small muted">${pct(sai + r.guard, r.ent)}% da renda já tem destino.</span>`;
   h += `</section>`;
 
   // ----- mês que vem (atalho)
@@ -305,7 +307,7 @@ function telaMes() {
   const gd = vivo(reg["gd|" + m]) ? reg["gd|" + m].valor : null;
   h += `<section><h2>Guardar <small class="num">meta ${R(r.meta)}</small></h2><div class="card">
     <label class="field"><span class="label">Quanto guardaram de fato em ${soMes(m)}</span><input inputmode="decimal" data-chg="guardado" data-mes="${m}" placeholder="R$ 0,00" value="${gd != null ? valorCampo(gd) : ""}"></label>
-    <span class="small muted">${gd == null ? "Dica: transfira a meta para a reserva no dia em que o salário cai, antes de gastar." : gd >= r.meta ? "Meta do mês cumprida." : "Faltam " + R(r.meta - gd) + " para a meta do mês."}</span></div></section>`;
+    <span class="small muted">O valor lançado aqui sai do "pode gastar"; a meta é só referência. ${gd == null ? "" : gd >= r.meta ? "Meta do mês cumprida." : "Faltam " + R(r.meta - gd) + " para a meta do mês."}</span></div></section>`;
   return h;
 }
 
@@ -369,7 +371,7 @@ function telaGraficos() {
     { rot: "Contas no Pix", v: r.pixFix, cor: "var(--pix)" },
     { rot: "Faturas do cartão", v: r.fat, cor: "var(--cred)" },
     { rot: "Débito e Pix avulsos", v: r.pixVar, cor: "var(--warn)" },
-    { rot: "Guardar", v: r.meta, cor: "var(--save)" },
+    { rot: "Guardado", v: r.guard, cor: "var(--save)" },
     { rot: "Livre para gastar", v: Math.max(r.livre, 0), cor: "var(--free)" }
   ], "Renda", r.ent)}
   ${falta ? `<span class="small" style="color:var(--danger);font-weight:600">Faltam ${R(falta)} para fechar o mês.</span>` : ""}</div></section>`;
@@ -397,9 +399,9 @@ function telaGraficos() {
   for (let i = 0; i < 6; i++) {
     const k = addMes(m, i), x = resumo(k);
     ms.push({ rot: curtoMes(k).slice(0, 3), ref: x.ent, nota: mil(x.livre), notaCor: x.livre < 0 ? "var(--danger)" : "var(--save)",
-      partes: [{ rot: "Contas Pix", v: x.pixFix + x.pixVar, cor: "var(--pix)" }, { rot: "Cartão", v: x.fat, cor: "var(--cred)" }, { rot: "Guardar", v: x.meta, cor: "var(--save)" }] });
+      partes: [{ rot: "Contas Pix", v: x.pixFix + x.pixVar, cor: "var(--pix)" }, { rot: "Cartão", v: x.fat, cor: "var(--cred)" }, { rot: "Guardado", v: x.guard, cor: "var(--save)" }] });
   }
-  h += `<section><h2>Próximos 6 meses</h2><div class="card">${barras(ms, [{ rot: "Contas Pix", cor: "var(--pix)" }, { rot: "Cartão", cor: "var(--cred)" }, { rot: "Guardar", cor: "var(--save)" }, { rot: "Renda", cor: "var(--fg)", tracejado: true }])}
+  h += `<section><h2>Próximos 6 meses</h2><div class="card">${barras(ms, [{ rot: "Contas Pix", cor: "var(--pix)" }, { rot: "Cartão", cor: "var(--cred)" }, { rot: "Guardado", cor: "var(--save)" }, { rot: "Renda", cor: "var(--fg)", tracejado: true }])}
     <span class="small muted">A linha tracejada é a renda. O número embaixo de cada mês é quanto sobra livre (em reais). Barra acima da linha = mês no vermelho.</span></div></section>`;
 
   // 4. faturas por cartão
@@ -496,10 +498,10 @@ function telaPlanejar() {
   }
 
   // projeção
-  h += `<section><h2>Próximos 6 meses</h2><div class="card"><div class="tablewrap"><table class="num"><thead><tr><th>Mês</th><th>Entra</th><th>Já sai</th><th>Guardar</th><th>Livre</th></tr></thead><tbody>`;
+  h += `<section><h2>Próximos 6 meses</h2><div class="card"><div class="tablewrap"><table class="num"><thead><tr><th>Mês</th><th>Entra</th><th>Já sai</th><th>Guardado</th><th>Livre</th></tr></thead><tbody>`;
   for (let i = 0; i < 6; i++) {
     const k = addMes(m0, i), r = resumo(k);
-    h += `<tr><td>${curtoMes(k)}</td><td>${R(r.ent)}</td><td>${R(r.pixFix + r.pixVar + r.fat)}</td><td>${R(r.meta)}</td><td class="${r.livre < 0 ? "neg" : "posv"}">${R(r.livre)}</td></tr>`;
+    h += `<tr><td>${curtoMes(k)}</td><td>${R(r.ent)}</td><td>${R(r.pixFix + r.pixVar + r.fat)}</td><td>${R(r.guard)}</td><td class="${r.livre < 0 ? "neg" : "posv"}">${R(r.livre)}</td></tr>`;
   }
   h += `</tbody></table></div><span class="small muted">"Já sai" = contas fixas + faturas com parcelas e compras já lançadas. Antes de parcelar algo, olhe se os próximos meses aguentam.</span></div></section>`;
 
@@ -561,7 +563,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 10 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 11 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
