@@ -376,11 +376,10 @@ function telaGraficos() {
   ], "Renda", r.ent)}
   ${falta ? `<span class="small" style="color:var(--danger);font-weight:600">Faltam ${R(falta)} para fechar o mês.</span>` : ""}</div></section>`;
 
-  // 2. por categoria (as 7 maiores + "Outras")
+  // 2. por categoria (todas as que têm lançamento)
   const porCat = {};
   for (const i of r.its) porCat[i.cat || "Outros"] = (porCat[i.cat || "Outros"] || 0) + i.valor;
   const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
-  const top = cats.slice(0, 7), resto = cats.slice(7).reduce((s, x) => s + x[1], 0);
   const cs0 = cartoes();
   const itemCat = (i, mostrarCat) => {
     const onde = i.forma === "credito" ? esc(nomeCartao(i.cartao)) + (i.parcela ? " · parc. " + i.parcela : "") : i.k === "fixa" ? "conta fixa Pix" : (FORMAS[i.forma] || "Pix");
@@ -389,8 +388,8 @@ function telaGraficos() {
     return li(esc(i.desc), R(i.valor), { act, sub: quando + " · " + onde + (mostrarCat ? " · " + esc(i.cat || "Outros") : "") });
   };
   const itensDe = (lista, mostrarCat) => lista.sort((a, b) => b.valor - a.valor).map(i => itemCat(i, mostrarCat)).join("");
-  const fat = top.map(([cat, v], i) => { const its = r.its.filter(x => (x.cat || "Outros") === cat); return { rot: cat, v, cor: CORES_CAT[i], n: its.length, itens: itensDe(its, false) }; });
-  if (resto) { const nomes = new Set(cats.slice(7).map(x => x[0])); const its = r.its.filter(x => nomes.has(x.cat || "Outros")); fat.push({ rot: "Outras categorias", v: resto, cor: CORES_CAT[7], n: its.length, itens: itensDe(its, true) }); }
+  // todas as categorias com lançamento aparecem; as 7 maiores têm cor própria, as menores ficam em cinza
+  const fat = cats.map(([cat, v], i) => { const its = r.its.filter(x => (x.cat || "Outros") === cat); return { rot: cat, v, cor: i < 7 ? CORES_CAT[i] : "var(--muted)", n: its.length, itens: itensDe(its, false) }; });
   h += `<section><h2>Gastos por categoria</h2><div class="card">${rosca(fat, "Total", soma(r.its))}
     <span class="small muted">Toque numa categoria para ver os lançamentos dela. Contas fixas, faturas e gastos do mês, pela categoria de cada um.</span></div></section>`;
 
@@ -563,7 +562,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 13 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 14 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 

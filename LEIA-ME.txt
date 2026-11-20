@@ -28,5 +28,5 @@ PRIMEIRO USO NO iPHONE
 Safari > endereço > Compartilhar > Adicionar à Tela de Início > abrir pelo ícone > Ajustes > Entrar com Google >
 Criar arquivo da casa > Ajustes > Compartilhar com o e-mail dela. Ela abre o app, entra com a conta dela.
 
-Ao mudar arquivos do app: subir de novo no GitHub, trocar o CACHE em sw.js e o número da versão no rodapé de Ajustes (app.js) (financas-v2...; em 20/11/2026 está em financas-v13).
+Ao mudar arquivos do app: subir de novo no GitHub, trocar o CACHE em sw.js e o número da versão no rodapé de Ajustes (app.js) (financas-v2...; em 20/11/2026 está em financas-v14).
 Teste sem Google: endereço com ?demo=1.
