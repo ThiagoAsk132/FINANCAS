@@ -79,6 +79,9 @@ const nomeP = k => cfg().pessoas[k] || (k === "a" ? "Pessoa 1" : "Pessoa 2");
 // valor de uma renda/conta fixa num mês (histórico de reajustes em "valores")
 function valorEm(rec, m) { let v = 0; for (const x of rec.valores || []) if (x.ini <= m) v = x.v; return v; }
 const ativo = (rec, m) => (rec.ini || "0000-00") <= m && (!rec.fim || m <= rec.fim);
+// conta fixa que não é todo mês (IPVA, licenciamento, manutenção): cai a cada "cada" meses a partir de ini
+const cai = (f, m) => ativo(f, m) && (!(f.cada > 1) || (entreMeses(f.ini, m) % f.cada) === 0);
+const proximaVez = (f, m) => { for (let i = 0; i < 36; i++) { const k = addMes(m, i); if (cai(f, k)) return k; } return ""; };
 const cartoes = () => Object.fromEntries(todos("cartao").map(c => [c.id, c]));
 const nomeCartao = id => (vivo(reg[id]) ? reg[id].nome : "Cartão excluído");
 
@@ -96,12 +99,13 @@ function itensMes(m) {
   const out = [], cs = cartoes();
   for (const f of todos("fixa")) {
     if (f.forma !== "credito") {
-      if (!ativo(f, m)) continue;
+      if (!cai(f, m)) continue;
       const ch = "fm|" + f.id + "|" + m, o = vivo(reg[ch]) ? reg[ch] : null;
+      if (o && o.noCartao) { out.push({ k: "fixa", forma: "pix", rec: f, desc: f.desc, cat: f.cat, valor: 0, noCartao: true, pago: true, dia: f.dia || 0, mesRef: m, data: m + "-" + p2(Math.min(f.dia || 31, diasNoMes(m))) }); continue; }
       out.push({ k: "fixa", forma: "pix", rec: f, desc: f.desc, cat: f.cat, valor: o && o.valor != null ? o.valor : valorEm(f, m), est: !!f.varia && !(o && o.valor != null), pago: !!(o && o.pago), dia: f.dia || 0, mesRef: m, data: m + "-" + p2(Math.min(f.dia || 31, diasNoMes(m))) });
     } else {
       for (const c of [addMes(m, -2), addMes(m, -1), m]) {
-        if (!ativo(f, c)) continue;
+        if (!cai(f, c)) continue;
         const data = c + "-" + p2(Math.min(f.dia || 1, diasNoMes(c)));
         if (vencMes(data, cs[f.cartao]) !== m) continue;
         const ch = "fm|" + f.id + "|" + c, o = vivo(reg[ch]) ? reg[ch] : null;
@@ -123,7 +127,7 @@ function entradasMes(m) {
   for (const r of todos("renda")) {
     if (!ativo(r, m)) continue;
     const ch = "rm|" + r.id + "|" + m, o = vivo(reg[ch]) ? reg[ch] : null;
-    out.push({ k: "renda", rec: r, desc: r.desc, valor: o && o.valor != null ? o.valor : valorEm(r, m), pessoa: r.pessoa, dia: r.dia || 1, ajustado: !!(o && o.valor != null) });
+    out.push({ k: "renda", rec: r, desc: r.desc, valor: o && o.valor != null ? o.valor : valorEm(r, m), est: !!r.varia && !(o && o.valor != null), pessoa: r.pessoa, dia: r.dia || 1, ajustado: !!(o && o.valor != null) });
   }
   for (const e of todos("entrada")) if (mesDe(e.data) === m) out.push({ k: "entrada", rec: e, desc: e.desc, valor: e.valor, pessoa: e.pessoa, data: e.data });
   return out;
@@ -196,11 +200,15 @@ function divisao(m) {
     const rat = i.rec.rateio === "a" || i.rec.rateio === "b" ? i.rec.rateio : "casal";
     if (rat === "casal") casal += i.valor; else { so[rat] += i.valor; itensSo[rat].push(i); }
     const p = pagadorDe(i);
-    if (p === "a" || p === "b") pagou[p] += i.valor; else semPag.push(i);
+    if (p === "a" || p === "b") pagou[p] += i.valor; else if (i.valor) semPag.push(i);
   }
   const parteA = Math.round(casal * pct.a), parte = { a: parteA, b: casal - parteA };
   const deve = { a: parte.a + so.a, b: parte.b + so.b };
-  return { r, renda, tot, pct, casal, parte, so, itensSo, deve, pagou, semPag, sobra: { a: renda.a - deve.a, b: renda.b - deve.b } };
+  // dinheiro que um passou para o outro no mês (ex.: Carol ajuda na fatura do Thiago) conta como pago por quem mandou
+  const transf = todos("transf").filter(t => t.data && mesDe(t.data) === m).sort((x, y) => x.data.localeCompare(y.data));
+  const env = { a: 0, b: 0 }; for (const t of transf) if (env[t.de] != null) env[t.de] += t.valor || 0;
+  const pagouEf = { a: pagou.a + env.a - env.b, b: pagou.b + env.b - env.a };
+  return { r, renda, tot, pct, casal, parte, so, itensSo, deve, pagou, pagouEf, transf, env, semPag, sobra: { a: renda.a - deve.a, b: renda.b - deve.b } };
 }
 function telaDivisao() {
   const m = mesSel, d = divisao(m), A = nomeP("a"), B = nomeP("b");
@@ -216,13 +224,16 @@ function telaDivisao() {
       <li><span>Parte das contas da casa (${pc(p)}%)</span><b>${R(d.parte[p])}</b></li>
       ${d.so[p] ? `<li><span>Gastos só ${p === "a" ? "dele" : "dela"}</span><b>${R(d.so[p])}</b></li>` : ""}
       <li class="tot"><span>Tem que pagar</span><b>${R(d.deve[p])}</b></li>
-      <li class="tot"><span>Sobra para ${p === "a" ? "ele" : "ela"}</span><b class="${d.sobra[p] < 0 ? "neg" : "pos"}">${d.sobra[p] < 0 ? "−" : ""}${R(Math.abs(d.sobra[p]))}</b></li></ul></div>`;
+      <li class="tot"><span>Dinheiro livre ${p === "a" ? "dele" : "dela"}</span><b class="${d.sobra[p] < 0 ? "neg" : "pos"}">${d.sobra[p] < 0 ? "−" : ""}${R(Math.abs(d.sobra[p]))}</b></li></ul></div>`;
   h += `<section><h2>Quanto cada um paga e quanto sobra</h2><div class="divgrid">${cartaoPessoa("a")}${cartaoPessoa("b")}</div></section>`;
 
   // acerto: o que cada um já tira do bolso x a parte de cada um
-  const dif = d.pagou.a - d.deve.a;   // > 0: a pessoa A paga mais do que a parte dela
+  const dif = d.pagouEf.a - d.deve.a;   // > 0: a pessoa A paga mais do que a parte dela (já contando as transferências)
   h += `<section><h2>Acerto entre vocês</h2><div class="card">
     <ul class="list num"><li><span>${esc(A)} já paga (Pix dele, cartões dele)</span><b>${R(d.pagou.a)}</b></li><li><span>${esc(B)} já paga (Pix dela, cartões dela)</span><b>${R(d.pagou.b)}</b></li></ul>`;
+  h += `<div class="transf"><div class="row" style="justify-content:space-between;align-items:center"><b>Já passaram um para o outro</b><button type="button" class="btn small" data-act="nova-transf">+ Transferência</button></div>` +
+    (d.transf.length ? `<ul class="list">` + d.transf.map(t => li(`${esc(nomeP(t.de))} → ${esc(nomeP(t.de === "a" ? "b" : "a"))}`, R(t.valor), { act: `data-act="edit" data-id="${t.id}"`, sub: dataBR(t.data) + (t.desc ? " · " + esc(t.desc) : "") })).join("") + `</ul>`
+      : `<span class="small muted">Quando um mandar dinheiro para o outro (ex.: ${esc(B)} ajudando na fatura do Nubank), registre aqui: o acerto já desconta.</span>`) + `</div>`;
   if (d.semPag.length) {
     h += `<div class="alert"><strong>Falta dizer quem paga ${d.semPag.length === 1 ? "esta conta" : "estas contas"}</strong><span class="small">Sem isso o acerto fica incompleto (${R(soma(d.semPag))} sem dono).</span><ul class="list">` +
       d.semPag.map(i => `<li class="dupl"><div class="li-main"><span>${esc(i.desc)}</span><small>${R(i.valor)}</small></div><span class="row" style="gap:6px;flex:none"><button type="button" class="btn small" data-act="pagador" data-id="${i.rec.id}" data-p="a">${esc(A)}</button><button type="button" class="btn small" data-act="pagador" data-id="${i.rec.id}" data-p="b">${esc(B)}</button></span></li>`).join("") + `</ul></div>`;
@@ -230,8 +241,8 @@ function telaDivisao() {
   const quem = dif > 0 ? B : A, pra = dif > 0 ? A : B, v = Math.abs(dif), lado = dif > 0 ? "a" : "b";
   h += d.semPag.length ? `<div class="acerto"><span class="small muted">Toque em quem paga cada conta acima para o app calcular quanto um tem que passar para o outro.</span></div>`
     : v < 100 ? `<div class="okcard">✓ Está equilibrado: cada um já paga a sua parte.</div>`
-    : `<div class="acerto"><span class="label">Para ficar justo</span><div class="big num">${esc(quem)} passa ${R(v)} para ${esc(pra)}</div>
-      <span class="small muted">${esc(pra)} paga hoje ${R(d.pagou[lado])}, mas a parte ${lado === "a" ? "dele" : "dela"} é ${R(d.deve[lado])}.</span></div>`;
+    : `<div class="acerto"><span class="label">Para ficar justo</span><div class="big num">${esc(quem)} ${d.transf.length ? "ainda passa" : "passa"} ${R(v)} para ${esc(pra)}</div>
+      <span class="small muted">${esc(pra)} paga ${R(d.pagouEf[lado])}${d.transf.length ? " (já contando as transferências)" : ""}, mas a parte ${lado === "a" ? "dele" : "dela"} é ${R(d.deve[lado])}.</span></div>`;
   h += `</div></section>`;
 
   const so = [...d.itensSo.a.map(i => [i, "a"]), ...d.itensSo.b.map(i => [i, "b"])];
@@ -354,6 +365,7 @@ const Maius = s => s.replace(/^./, x => x.toUpperCase());
 
 function linhaFixaPix(i, m, hoje) {
   const atrasada = !i.pago && i.dia && i.data < hoje;
+  if (i.noCartao) return li(esc(i.desc), "no cartão", { act: `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${m}"`, sub: "este mês foi no cartão de crédito: o valor está na fatura" });
   return li(esc(i.desc), (i.est ? "≈ " : "") + R(i.valor), {
     pre: `<button type="button" class="chk${i.pago ? " on" : ""}" data-act="pago" data-id="${i.rec.id}" data-mes="${m}" aria-label="${i.pago ? "Marcar como não paga" : "Marcar como paga"}: ${esc(i.desc)}" aria-pressed="${i.pago}">${ICON_OK}</button>`,
     act: `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${m}"`,
@@ -484,7 +496,7 @@ function telaMes() {
   h += `<details class="card flat dobra"><summary><span>Entradas</span><b class="num pos">${R(r.ent)}</b></summary><ul class="list">`;
   if (!r.ents.length) h += `<li class="empty" style="display:block">Nenhuma renda neste mês.</li>`;
   for (const e of r.ents) {
-    if (e.k === "renda") h += li(esc(e.desc), R(e.valor), { act: `data-act="renda-mes" data-id="${e.rec.id}"`, sub: esc(nomeP(e.pessoa)) + " · " + quandoRenda(e.rec, m) + (e.ajustado ? " · valor ajustado neste mês" : ""), cls: "pos" });
+    if (e.k === "renda") h += li(esc(e.desc), (e.est ? "≈ " : "") + R(e.valor), { act: `data-act="renda-mes" data-id="${e.rec.id}"`, sub: esc(nomeP(e.pessoa)) + " · " + quandoRenda(e.rec, m) + (e.ajustado ? " · valor ajustado neste mês" : ""), cls: "pos" });
     else h += li(esc(e.desc), R(e.valor), { act: `data-act="edit" data-id="${e.rec.id}"`, sub: dataBR(e.data) + " · " + esc(nomeP(e.pessoa)) + " · entrada avulsa", cls: "pos" });
   }
   h += `</ul></details>`;
@@ -610,7 +622,8 @@ function telaFixas() {
   const m = mesAtual();
   const rendas = todos("renda").sort((a, b) => (a.pessoa || "").localeCompare(b.pessoa || "") || (a.dia || 0) - (b.dia || 0));
   const fixas = todos("fixa").sort((a, b) => (a.dia || 99) - (b.dia || 99));
-  const atv = fixas.filter(f => !f.fim || f.fim >= m), enc = fixas.filter(f => f.fim && f.fim < m);
+  const vivas = fixas.filter(f => !f.fim || f.fim >= m), enc = fixas.filter(f => f.fim && f.fim < m);
+  const atv = vivas.filter(f => !(f.cada > 1)), per = vivas.filter(f => f.cada > 1);
   const rendaTot = rendas.filter(r => ativo(r, m)).reduce((s, r) => s + valorEm(r, m), 0);
   const tot = forma => atv.filter(f => (f.forma === "credito") === (forma === "credito") && ativo(f, m)).reduce((s, f) => s + valorEm(f, m), 0);
   const tPix = tot("pix"), tCred = tot("credito");
@@ -619,7 +632,7 @@ function telaFixas() {
     ${rendaTot ? `<span class="sep"></span><span>As fixas levam</span><span class="v">${pct(tPix + tCred, rendaTot)}% da renda</span>` : ""}</div></section>`;
   h += `<section><h2>Rendas <button class="btn small" data-act="nova-renda">+ Renda</button></h2><div class="card flat"><ul class="list">`;
   if (!rendas.length) h += `<li class="empty" style="display:block">Cadastre o salário de cada um (e outras rendas que se repetem).</li>`;
-  for (const r of rendas) h += li(esc(r.desc), R(valorEm(r, m)), { act: `data-act="edit" data-id="${r.id}"`, sub: esc(nomeP(r.pessoa)) + " · " + quandoRenda(r, m) + (r.fim ? " · até " + curtoMes(r.fim) : ""), cls: "pos" });
+  for (const r of rendas) h += li(esc(r.desc), (r.varia ? "≈ " : "") + R(valorEm(r, m)), { act: `data-act="edit" data-id="${r.id}"`, sub: esc(nomeP(r.pessoa)) + " · " + quandoRenda(r, m) + (r.fim ? " · até " + curtoMes(r.fim) : ""), cls: "pos" });
   h += `</ul></div></section>`;
   const linha = f => {
     const base = li(esc(f.desc) + (f.ini > m ? ` <span class="tag pix">a partir de ${curtoMes(f.ini)}</span>` : ""), (f.varia ? "≈ " : "") + R(valorEm(f, f.ini > m ? f.ini : m)), { act: `data-act="edit" data-id="${f.id}"`, sub: (f.forma === "credito" ? "cobra dia " + (f.dia || 1) : f.dia ? "vence dia " + f.dia : "sem vencimento") + " · " + esc(f.cat || "") + (f.fim ? " · até " + curtoMes(f.fim) : "") });
@@ -648,6 +661,11 @@ function telaFixas() {
       (ps.length ? `<li class="sub">Parcelas de compras no cartão · ${R(soma(ps))}</li>` + li(`${ps.length} ${ps.length === 1 ? "compra parcelada" : "compras parceladas"}`, R(soma(ps)), { act: `data-act="ir-aba" data-tab="mes"`, sub: ultima ? `a última termina em ${curtoMes(addMes(m, ultima))} · toque para ver` : "última parcela neste mês" }) : "") + `</ul></div>`;
   }
   h += `</section>`;
+  if (per.length) {
+    const vProx = f => valorEm(f, proximaVez(f, m) || m), porMes = per.reduce((s, f) => s + Math.round(vProx(f) / f.cada), 0);
+    h += `<section><h2>Contas de vez em quando <button class="btn small" data-act="nova-fixa" data-forma="pix">+ Conta</button></h2><span class="small muted">Para não pesar quando chegarem, o ideal é separar ≈ <b>${R(porMes)} por mês</b>.</span><div class="card flat"><ul class="list">` +
+      per.sort((a, b) => proximaVez(a, m).localeCompare(proximaVez(b, m))).map(f => li(esc(f.desc), (f.varia ? "≈ " : "") + R(vProx(f)), { act: `data-act="edit" data-id="${f.id}"`, sub: (f.cada === 12 ? "1 vez por ano" : "a cada " + f.cada + " meses") + " · próxima: " + curtoMes(proximaVez(f, m)) + " · " + (f.forma === "credito" ? esc(nomeCartao(f.cartao)) : "Pix/boleto") })).join("") + `</ul></div></section>`;
+  }
   if (enc.length) {
     h += `<details class="card"><summary class="small muted">Contas encerradas (${enc.length})</summary><ul class="list">`;
     for (const f of enc) h += li(esc(f.desc), R(valorEm(f, f.fim)), { act: `data-act="edit" data-id="${f.id}"`, sub: "terminou em " + curtoMes(f.fim) });
@@ -661,7 +679,7 @@ function telaFixas() {
 function telaPlanejar() {
   const m0 = mesAtual(), c = cfg();
   const rendaFixa = todos("renda").filter(r => ativo(r, m0)).reduce((s, r) => s + valorEm(r, m0), 0);
-  const fixasTot = todos("fixa").filter(f => ativo(f, m0)).reduce((s, f) => s + valorEm(f, m0), 0);
+  const fixasTot = todos("fixa").filter(f => cai(f, m0)).reduce((s, f) => s + valorEm(f, m0), 0);
   const meta = metaDe(rendaFixa);
   const mv = mediaVariavel(m0);
   const diaADia = rendaFixa - fixasTot - meta;
@@ -694,7 +712,7 @@ function telaPlanejar() {
   // 60/30/10 (regra escolhida pelo casal em 19/11/2026)
   if (rendaFixa) {
     let nec = 0, des = 0;
-    for (const f of todos("fixa").filter(f => ativo(f, m0))) (NECESSIDADE.has(f.cat) ? (nec += valorEm(f, m0)) : (des += valorEm(f, m0)));
+    for (const f of todos("fixa").filter(f => cai(f, m0))) (NECESSIDADE.has(f.cat) ? (nec += valorEm(f, m0)) : (des += valorEm(f, m0)));
     if (mv) for (const [cat, v] of Object.entries(mv.porCat)) (NECESSIDADE.has(cat) ? (nec += v) : (des += v));
     const barra = (rot, v, ideal, cor, txt) => `<div class="catrow num"><span>${rot}</span><span><b>${pct(v, rendaFixa)}%</b> <span class="muted small">${txt} ${ideal}%</span></span><div class="bar"><span style="width:${Math.min(100, pct(v, rendaFixa))}%;background:${cor}"></span></div></div>`;
     h += `<section><h2>Regra 60/30/10</h2><div class="card">
@@ -770,7 +788,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 25 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 26 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
@@ -976,6 +994,8 @@ function formFixa(rec, formaIni) {
     titulo: novo ? "Nova conta fixa" : "Conta fixa", novo, foco: "desc",
     campos: [
       { n: "desc", rot: "Conta", tipo: "texto", v: f.desc, ph: "Ex.: Aluguel, luz, internet, Netflix", lista: sugestoes("fixa") },
+      { n: "cada", rot: "Repete", tipo: "seg", v: String(f.cada > 1 ? f.cada : 1), ops: [{ v: "1", t: "Todo mês" }, { v: "6", t: "A cada 6 meses" }, { v: "12", t: "1 vez por ano" }],
+        dica: v => v.cada !== "1" ? "Em \"Começa em\", ponha o mês em que ela cai (ex.: IPVA = fevereiro)." : "" },
       { n: "varia", rot: "O valor", tipo: "seg", v: f.varia ? "1" : "", ops: [{ v: "", t: "É sempre o mesmo" }, { v: "1", t: "Muda todo mês" }] },
       { n: "valor", rot: "Valor por mês", tipo: "valor", v: novo ? 0 : valorEm(f, mDef), dica: v => v.varia === "1" ? "Coloque a média. Em cada mês o app mostra ≈ até vocês porem o valor real." : "" },
       { n: "apartir", rot: novo ? "Começa em" : "Este valor vale a partir de", tipo: "mes", v: mDef,
@@ -1004,7 +1024,7 @@ function formFixa(rec, formaIni) {
       }
       valores.sort((a, b) => a.ini.localeCompare(b.ini));
       gravar({ id: f.id || novoId("f"), tipo: "fixa", desc: v.desc.trim(), valores, ini: valores[0].ini, forma: v.forma, cartao: v.forma === "credito" ? v.cartao : "", dia, cat: v.cat, fim: v.fim || "",
-        varia: v.varia === "1", pagador: v.forma !== "credito" && (v.pagador === "a" || v.pagador === "b") ? v.pagador : "", rateio: v.rateio === "a" || v.rateio === "b" ? v.rateio : "" });
+        varia: v.varia === "1", cada: +v.cada > 1 ? +v.cada : 0, pagador: v.forma !== "credito" && (v.pagador === "a" || v.pagador === "b") ? v.pagador : "", rateio: v.rateio === "a" || v.rateio === "b" ? v.rateio : "" });
       if (novo) toast("Conta fixa cadastrada. Ela aparece em todos os meses a partir de " + curtoMes(v.apartir) + ".");
     },
     textoExcluir: "Excluir de todos os meses",
@@ -1019,7 +1039,8 @@ function formRenda(rec) {
     campos: [
       { n: "desc", rot: "Descrição", tipo: "texto", v: r.desc, ph: "Ex.: Salário, pró-labore, aluguel recebido" },
       { n: "pessoa", rot: "De quem", tipo: "seg", v: r.pessoa || eu(), ops: opsPessoa() },
-      { n: "valor", rot: "Valor líquido por mês (o que cai na conta)", tipo: "valor", v: novo ? 0 : valorEm(r, mDef) },
+      { n: "varia", rot: "O valor", tipo: "seg", v: r.varia ? "1" : "", ops: [{ v: "", t: "É sempre o mesmo" }, { v: "1", t: "Muda todo mês" }] },
+      { n: "valor", rot: "Valor líquido por mês (o que cai na conta)", tipo: "valor", v: novo ? 0 : valorEm(r, mDef), dica: v => v.varia === "1" ? "Coloque a média. Em cada mês o app mostra ≈ até vocês porem o valor que veio." : "" },
       { n: "apartir", rot: novo ? "Começa em" : "Este valor vale a partir de", tipo: "mes", v: mDef },
       { n: "quando", rot: "Quando cai", tipo: "seg", v: r.util ? "util" : (novo ? "util" : "dia"), ops: [{ v: "util", t: "Dia útil" }, { v: "dia", t: "Dia fixo do mês" }] },
       { n: "dia", rot: "Dia", tipo: "int", v: r.dia || 5, min: 1, max: 31,
@@ -1035,7 +1056,7 @@ function formRenda(rec) {
       if (novo) valores = [{ ini: v.apartir, v: c }];
       else if (valorEm(r, v.apartir) !== c || valores.some(x => x.ini > v.apartir) || !valores.length) valores = valores.filter(x => x.ini < v.apartir).concat({ ini: v.apartir, v: c });
       valores.sort((a, b) => a.ini.localeCompare(b.ini));
-      gravar({ id: r.id || novoId("r"), tipo: "renda", desc: v.desc.trim(), pessoa: v.pessoa, valores, ini: valores[0].ini, dia, util: v.quando === "util", fim: v.fim || "" });
+      gravar({ id: r.id || novoId("r"), tipo: "renda", varia: v.varia === "1", desc: v.desc.trim(), pessoa: v.pessoa, valores, ini: valores[0].ini, dia, util: v.quando === "util", fim: v.fim || "" });
     },
     excluir: novo ? null : () => apagar(r.id)
   });
@@ -1049,13 +1070,33 @@ function formFixaMes(fid, mes) {
     titulo: f.desc + " · " + nomeMes(mes),
     campos: [
       { n: "valor", rot: "Valor neste mês", tipo: "valor", v: o.valor != null ? o.valor : padrao, dica: () => f.varia ? `Conta que varia: a média é ${R(padrao)}. Ponha o valor que veio neste mês.` : `Valor padrão da conta: ${R(padrao)}. Mude aqui só se neste mês veio diferente.` },
-      ...(cred ? [] : [{ n: "pago", rot: "Situação", tipo: "seg", v: o.pago ? "1" : "", ops: [{ v: "", t: "A pagar" }, { v: "1", t: "Paga" }] }])
+      ...(cred ? [] : [{ n: "pago", rot: "Situação", tipo: "seg", v: o.noCartao ? "c" : o.pago ? "1" : "", ops: [{ v: "", t: "A pagar" }, { v: "1", t: "Paga no Pix" }, { v: "c", t: "Foi no cartão" }],
+        dica: v => v.pago === "c" ? "Ela sai das contas do Pix deste mês, porque o valor vem na fatura do cartão. Lance a compra no crédito (ou pelo comprovante) para ela entrar na fatura." : "" }])
     ],
     salvar(v) {
       const c = centavos(v.valor); if (!(c >= 0)) return "Valor inválido.";
-      gravar({ id: ch, tipo: "fixaMes", fixaId: fid, mes, valor: c === padrao && !f.varia ? null : c, pago: !cred && v.pago === "1" });
+      gravar({ id: ch, tipo: "fixaMes", fixaId: fid, mes, valor: c === padrao && !f.varia ? null : c, pago: !cred && v.pago === "1", noCartao: !cred && v.pago === "c" });
     },
     extra: { t: "Editar a conta", fn: () => formFixa(f) }
+  });
+}
+function formTransf(rec) {
+  const novo = !rec, t = rec || {};
+  abrir({
+    titulo: novo ? "Transferência entre vocês" : "Transferência", novo, foco: "valor",
+    campos: [
+      { n: "de", rot: "Quem mandou", tipo: "seg", v: t.de || "b", ops: opsPessoa() },
+      { n: "valor", rot: "Valor", tipo: "valor", v: t.valor },
+      { n: "data", rot: "Data", tipo: "data", v: t.data || hojeISO() },
+      { n: "desc", rot: "Para quê (opcional)", tipo: "texto", v: t.desc, ph: "Ex.: ajuda na fatura do Nubank" }
+    ],
+    salvar(v) {
+      const c = centavos(v.valor); if (!(c > 0)) return "Informe o valor.";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v.data)) return "Informe a data.";
+      gravar({ id: t.id || novoId("t"), tipo: "transf", de: v.de, valor: c, data: v.data, desc: (v.desc || "").trim() });
+      if (novo) toast("Transferência registrada. O acerto da aba Divisão já desconta.");
+    },
+    excluir: novo ? null : () => apagar(t.id)
   });
 }
 function formRendaMes(rid, mes) {
@@ -1064,7 +1105,7 @@ function formRendaMes(rid, mes) {
   abrir({
     titulo: r.desc + " · " + nomeMes(mes),
     campos: [{ n: "valor", rot: "Valor neste mês", tipo: "valor", v: o.valor != null ? o.valor : padrao, dica: () => `Valor padrão: ${R(padrao)}. Mude só se neste mês veio diferente (férias, 13º, hora extra).` }],
-    salvar(v) { const c = centavos(v.valor); if (!(c >= 0)) return "Valor inválido."; gravar({ id: ch, tipo: "rendaMes", rendaId: rid, mes, valor: c === padrao ? null : c }); },
+    salvar(v) { const c = centavos(v.valor); if (!(c >= 0)) return "Valor inválido."; gravar({ id: ch, tipo: "rendaMes", rendaId: rid, mes, valor: c === padrao && !r.varia ? null : c }); },
     extra: { t: "Editar a renda", fn: () => formRenda(r) }
   });
 }
@@ -1094,7 +1135,7 @@ function formCartao(rec) {
 }
 function editar(id) {
   const r = reg[id]; if (!vivo(r)) return;
-  ({ gasto: formLancamento, entrada: formLancamento, fixa: formFixa, renda: formRenda, cartao: formCartao })[r.tipo]?.(r);
+  ({ gasto: formLancamento, entrada: formLancamento, fixa: formFixa, renda: formRenda, cartao: formCartao, transf: formTransf })[r.tipo]?.(r);
 }
 
 // ---------- eventos da tela ----------
@@ -1130,6 +1171,7 @@ $("main").addEventListener("click", async e => {
     gravar({ ...o, pago: !o.pago });
   }
   else if (a === "nova-renda") formRenda(null);
+  else if (a === "nova-transf") formTransf(null);
   else if (a === "nova-fixa") formFixa(null, b.dataset.forma);
   else if (a === "novo-cartao") formCartao(null);
   else if (a === "entrar") window.FIN.entrar();
