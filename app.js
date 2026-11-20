@@ -155,6 +155,75 @@ function mediaVariavel(m0) {
 }
 function guardadoTotal() { return (cfg().reservaIni || 0) + todos("guardado").reduce((s, g) => s + (g.valor || 0), 0); }
 
+// ---------- divisão das contas pela renda ----------
+// dono do cartão: campo "dono" ou, se não tiver, o nome da pessoa escrito no nome do cartão
+function donoCartao(id) {
+  const k = reg[id]; if (!vivo(k)) return "";
+  if (k.dono) return k.dono;
+  const n = (k.nome || "").toLowerCase();
+  return ["a", "b"].find(p => n.includes(nomeP(p).toLowerCase())) || "";
+}
+// quem tira o dinheiro do bolso: cartão = dono do cartão; Pix/débito avulso = quem lançou; fixa no Pix = campo "pagador"
+function pagadorDe(i) {
+  if (i.forma === "credito") return donoCartao(i.cartao);
+  if (i.k === "gasto") return i.rec.pessoa || "";
+  return i.rec.pagador || "";
+}
+function divisao(m) {
+  const r = resumo(m), renda = { a: 0, b: 0 };
+  for (const e of r.ents) if (renda[e.pessoa] != null) renda[e.pessoa] += e.valor;
+  const tot = renda.a + renda.b, pct = { a: tot ? renda.a / tot : 0.5, b: tot ? renda.b / tot : 0.5 };
+  let casal = 0; const so = { a: 0, b: 0 }, pagou = { a: 0, b: 0 }, semPag = [], itensSo = { a: [], b: [] };
+  for (const i of r.its) {
+    const rat = i.rec.rateio === "a" || i.rec.rateio === "b" ? i.rec.rateio : "casal";
+    if (rat === "casal") casal += i.valor; else { so[rat] += i.valor; itensSo[rat].push(i); }
+    const p = pagadorDe(i);
+    if (p === "a" || p === "b") pagou[p] += i.valor; else semPag.push(i);
+  }
+  const parteA = Math.round(casal * pct.a), parte = { a: parteA, b: casal - parteA };
+  const deve = { a: parte.a + so.a, b: parte.b + so.b };
+  return { r, renda, tot, pct, casal, parte, so, itensSo, deve, pagou, semPag, sobra: { a: renda.a - deve.a, b: renda.b - deve.b } };
+}
+function telaDivisao() {
+  const m = mesSel, d = divisao(m), A = nomeP("a"), B = nomeP("b");
+  let h = mesbar(m);
+  if (!d.tot) return h + `<div class="card"><span class="empty">Cadastre as rendas de cada um na aba Fixas para o app dividir as contas.</span></div>`;
+  const pc = p => Math.round(d.pct[p] * 100);
+  h += `<section class="hero"><span class="label">Quem ganha quanto em ${soMes(m)}</span>
+    <div class="stack" style="height:16px;margin-top:6px"><span style="width:${(d.pct.a * 100).toFixed(2)}%;background:var(--c1)"></span><span style="width:${(d.pct.b * 100).toFixed(2)}%;background:var(--c5)"></span></div>
+    <div class="legend"><span><i style="background:var(--c1)"></i>${esc(A)} ${pc("a")}% · ${R0(d.renda.a)}</span><span><i style="background:var(--c5)"></i>${esc(B)} ${pc("b")}% · ${R0(d.renda.b)}</span></div>
+    <span class="small muted">As contas da casa (${R(d.casal)} neste mês) são divididas nessa mesma proporção: quem ganha mais paga uma parte maior.</span></section>`;
+  const cartaoPessoa = p => `<div class="card divp"><h3>${esc(nomeP(p))} <small class="muted">${pc(p)}%</small></h3><ul class="list num">
+      <li><span>Renda do mês</span><b class="pos">${R(d.renda[p])}</b></li>
+      <li><span>Parte das contas da casa (${pc(p)}%)</span><b>${R(d.parte[p])}</b></li>
+      ${d.so[p] ? `<li><span>Gastos só ${p === "a" ? "dele" : "dela"}</span><b>${R(d.so[p])}</b></li>` : ""}
+      <li class="tot"><span>Tem que pagar</span><b>${R(d.deve[p])}</b></li>
+      <li class="tot"><span>Sobra para ${p === "a" ? "ele" : "ela"}</span><b class="${d.sobra[p] < 0 ? "neg" : "pos"}">${d.sobra[p] < 0 ? "−" : ""}${R(Math.abs(d.sobra[p]))}</b></li></ul></div>`;
+  h += `<section><h2>Quanto cada um paga e quanto sobra</h2><div class="divgrid">${cartaoPessoa("a")}${cartaoPessoa("b")}</div></section>`;
+
+  // acerto: o que cada um já tira do bolso x a parte de cada um
+  const dif = d.pagou.a - d.deve.a;   // > 0: a pessoa A paga mais do que a parte dela
+  h += `<section><h2>Acerto entre vocês</h2><div class="card">
+    <ul class="list num"><li><span>${esc(A)} já paga (Pix dele, cartões dele)</span><b>${R(d.pagou.a)}</b></li><li><span>${esc(B)} já paga (Pix dela, cartões dela)</span><b>${R(d.pagou.b)}</b></li></ul>`;
+  if (d.semPag.length) {
+    h += `<div class="alert"><strong>Falta dizer quem paga ${d.semPag.length === 1 ? "esta conta" : "estas contas"}</strong><span class="small">Sem isso o acerto fica incompleto (${R(soma(d.semPag))} sem dono).</span><ul class="list">` +
+      d.semPag.map(i => `<li class="dupl"><div class="li-main"><span>${esc(i.desc)}</span><small>${R(i.valor)}</small></div><span class="row" style="gap:6px;flex:none"><button type="button" class="btn small" data-act="pagador" data-id="${i.rec.id}" data-p="a">${esc(A)}</button><button type="button" class="btn small" data-act="pagador" data-id="${i.rec.id}" data-p="b">${esc(B)}</button></span></li>`).join("") + `</ul></div>`;
+  }
+  const quem = dif > 0 ? B : A, pra = dif > 0 ? A : B, v = Math.abs(dif), lado = dif > 0 ? "a" : "b";
+  h += d.semPag.length ? `<div class="acerto"><span class="small muted">Toque em quem paga cada conta acima para o app calcular quanto um tem que passar para o outro.</span></div>`
+    : v < 100 ? `<div class="okcard">✓ Está equilibrado: cada um já paga a sua parte.</div>`
+    : `<div class="acerto"><span class="label">Para ficar justo</span><div class="big num">${esc(quem)} passa ${R(v)} para ${esc(pra)}</div>
+      <span class="small muted">${esc(pra)} paga hoje ${R(d.pagou[lado])}, mas a parte ${lado === "a" ? "dele" : "dela"} é ${R(d.deve[lado])}.</span></div>`;
+  h += `</div></section>`;
+
+  const so = [...d.itensSo.a.map(i => [i, "a"]), ...d.itensSo.b.map(i => [i, "b"])];
+  h += `<details class="dobra"><summary><span>Gastos individuais (não divididos)</span><b class="num">${R(d.so.a + d.so.b)}</b></summary><ul class="list">` +
+    (so.length ? so.map(([i, p]) => li(esc(i.desc), R(i.valor), { act: i.k === "fixa" ? `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${i.mesRef}"` : `data-act="edit" data-id="${i.rec.id}"`, sub: "só " + esc(nomeP(p)) + " · " + esc(i.cat || "") })).join("")
+      : `<li><span class="small muted">Nenhum. Para marcar um gasto ou conta como só de um de vocês, abra o lançamento e mude "Dividir".</span></li>`) + `</ul></details>`;
+  h += `<p class="small muted" style="padding:0 4px">Entram aqui todas as contas fixas, as faturas que vencem no mês e os gastos no Pix/débito. O dinheiro guardado não entra. Quem paga: o cartão conta para o dono do cartão; Pix e débito, para quem lançou.</p>`;
+  return h;
+}
+
 // ---------- estado da tela ----------
 let aba = loc.ler("aba", "mes");
 let mesSel = mesAtual();
@@ -171,8 +240,8 @@ function render() {
   if (ae && $("main").contains(ae) && /^(INPUT|SELECT)$/.test(ae.tagName)) { renderPendente = true; return; }
   renderPendente = false;
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === aba ? "page" : "false"));
-  $("fab").hidden = aba === "ajustes" || aba === "graficos";
-  const html = { mes: telaMes, graficos: telaGraficos, fixas: telaFixas, planejar: telaPlanejar, ajustes: telaAjustes }[aba]();
+  $("fab").hidden = aba === "ajustes" || aba === "graficos" || aba === "divisao";
+  const html = { mes: telaMes, graficos: telaGraficos, divisao: telaDivisao, fixas: telaFixas, planejar: telaPlanejar, ajustes: telaAjustes }[aba]();
   $("main").innerHTML = html;
   renderSync();
 }
@@ -607,7 +676,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 18 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 19 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
@@ -684,6 +753,7 @@ $("dlg").addEventListener("close", () => { folha = null; });
 const opsPessoa = () => [{ v: "a", t: nomeP("a") }, { v: "b", t: nomeP("b") }];
 const opsCartao = () => todos("cartao").sort((a, b) => a.nome.localeCompare(b.nome)).map(k => ({ v: k.id, t: k.nome }));
 const opsCat = () => CATS.map(c => ({ v: c, t: c }));
+const opsDividir = () => [{ v: "casal", t: "Casal (pela renda de cada um)" }, { v: "a", t: "Só " + nomeP("a") }, { v: "b", t: "Só " + nomeP("b") }];
 const exigir = (v, campos) => {
   if (campos.includes("desc") && !v.desc.trim()) return "Escreva uma descrição.";
   if (campos.includes("valor")) { const c = centavos(v.valor); if (!(c > 0)) return "Informe um valor maior que zero (ex.: 150,90)."; }
@@ -716,7 +786,8 @@ function formLancamento(rec, pre) {
           return `Primeira parcela na fatura que vence <b>${dataBRano(vencData(vm, k))}</b>` + (n > 1 ? `; última em ${curtoMes(addMes(vm, n - 1))}.` : ".") + (c > 0 && n > 1 ? ` ${n}× de ${R(Math.floor(c / n))}.` : "");
         } },
       { n: "cat", rot: "Categoria", tipo: "sel", v: g.cat || "Mercado", ops: opsCat(), se: v => v.tipo === "gasto" },
-      { n: "pessoa", rot: "Quem", tipo: "seg", v: g.pessoa || eu(), ops: opsPessoa() }
+      { n: "pessoa", rot: "Quem", tipo: "seg", v: g.pessoa || eu(), ops: opsPessoa() },
+      { n: "rateio", rot: "Dividir", tipo: "sel", v: g.rateio || "casal", ops: opsDividir(), se: v => v.tipo === "gasto" }
     ],
     salvar(v) {
       if (pre && pre.quem && !v.desc.trim()) v.desc = pre.quem;
@@ -729,6 +800,7 @@ function formLancamento(rec, pre) {
       if (pre) base.origem = "comprovante";
       if (v.tipo === "gasto") {
         Object.assign(base, { forma: v.forma, cat: v.cat });
+        if (v.rateio === "a" || v.rateio === "b") base.rateio = v.rateio;
         if (v.forma === "credito") {
           if (!vivo(reg[v.cartao])) return "Cadastre um cartão em Ajustes ou escolha Pix/Débito.";
           const n = parseInt(v.parc); if (!(n >= 1 && n <= 24)) return "Parcelas: de 1 a 24.";
@@ -818,6 +890,8 @@ function formFixa(rec, formaIni) {
       { n: "dia", rot: "Dia do vencimento", tipo: "int", v: novo ? 10 : (f.dia || ""), min: 1, max: 31, ph: "sem vencimento",
         dica: v => v.forma === "credito" ? "No crédito, é o dia em que a cobrança entra no cartão." : "Deixe vazio se não tem vencimento (mercado, remédio)." },
       { n: "cat", rot: "Categoria", tipo: "sel", v: f.cat || "Contas da casa", ops: opsCat() },
+      { n: "pagador", rot: "Quem paga", tipo: "seg", v: f.pagador || "", ops: [...opsPessoa(), { v: "", t: "Não sei" }], se: v => v.forma !== "credito" },
+      { n: "rateio", rot: "Dividir", tipo: "sel", v: f.rateio || "casal", ops: opsDividir() },
       { n: "fim", rot: "Último mês (deixe vazio se não tem fim)", tipo: "mes", v: f.fim || "" }
     ],
     salvar(v) {
@@ -834,7 +908,8 @@ function formFixa(rec, formaIni) {
         valores = valores.filter(x => x.ini < v.apartir).concat({ ini: v.apartir, v: c });
       }
       valores.sort((a, b) => a.ini.localeCompare(b.ini));
-      gravar({ id: f.id || novoId("f"), tipo: "fixa", desc: v.desc.trim(), valores, ini: valores[0].ini, forma: v.forma, cartao: v.forma === "credito" ? v.cartao : "", dia, cat: v.cat, fim: v.fim || "" });
+      gravar({ id: f.id || novoId("f"), tipo: "fixa", desc: v.desc.trim(), valores, ini: valores[0].ini, forma: v.forma, cartao: v.forma === "credito" ? v.cartao : "", dia, cat: v.cat, fim: v.fim || "",
+        pagador: v.forma !== "credito" && (v.pagador === "a" || v.pagador === "b") ? v.pagador : "", rateio: v.rateio === "a" || v.rateio === "b" ? v.rateio : "" });
       if (novo) toast("Conta fixa cadastrada. Ela aparece em todos os meses a partir de " + curtoMes(v.apartir) + ".");
     },
     textoExcluir: "Excluir de todos os meses",
@@ -904,6 +979,7 @@ function formCartao(rec) {
     titulo: novo ? "Novo cartão" : "Cartão", novo, foco: "nome",
     campos: [
       { n: "nome", rot: "Nome", tipo: "texto", v: k.nome, ph: "Ex.: Nubank Thiago, Itaú casal" },
+      { n: "dono", rot: "De quem é (quem paga a fatura)", tipo: "seg", v: k.dono || donoCartao(k.id) || eu(), ops: opsPessoa() },
       { n: "fech", rot: "Dia do fechamento", tipo: "int", v: k.fech || 1, min: 1, max: 31 },
       { n: "venc", rot: "Dia do vencimento", tipo: "int", v: k.venc || 10, min: 1, max: 31,
         dica: v => { const F = parseInt(v.fech) || 1; return `Compras feitas do dia ${F} em diante já vão para a fatura seguinte — o dia ${F} é o "melhor dia de compra".`; } }
@@ -912,7 +988,7 @@ function formCartao(rec) {
       if (!v.nome.trim()) return "Dê um nome ao cartão.";
       const fe = parseInt(v.fech), ve = parseInt(v.venc);
       if (!(fe >= 1 && fe <= 31 && ve >= 1 && ve <= 31)) return "Dias: de 1 a 31.";
-      gravar({ id: k.id || novoId("c"), tipo: "cartao", nome: v.nome.trim(), fech: fe, venc: ve });
+      gravar({ id: k.id || novoId("c"), tipo: "cartao", nome: v.nome.trim(), fech: fe, venc: ve, dono: v.dono });
     },
     excluir: novo ? null : () => {
       const usado = todos("gasto").some(g => g.cartao === k.id) || todos("fixa").some(f => f.cartao === k.id);
@@ -941,6 +1017,7 @@ $("main").addEventListener("click", async e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const a = b.dataset.act, id = b.dataset.id;
   if (a === "mes") { mesSel = addMes(mesSel, +b.dataset.d); render(); }
+  else if (a === "pagador") { const f = reg[id]; if (vivo(f)) { gravar({ ...f, pagador: b.dataset.p }); toast(`"${f.desc}" fica com ${nomeP(b.dataset.p)}.`); } }
   else if (a === "dup-apagar") { const x = reg[id]; apagar(id); toast(`"${x ? x.desc : "Lançamento"}" apagado.`); }
   else if (a === "dup-ok") { const k = parDup(b.dataset.a, b.dataset.b); gravar({ id: k, tipo: "dupOk" }); toast("Certo, não vou mais avisar sobre esses dois."); }
   else if (a === "ir-aba") { aba = b.dataset.tab; loc.gravar("aba", aba); render(); window.scrollTo(0, 0); }

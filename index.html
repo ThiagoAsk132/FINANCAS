@@ -141,11 +141,19 @@ input,select{background:var(--surface2);border:1px solid var(--line);border-radi
 li.dupl{display:flex;align-items:center;gap:10px;justify-content:space-between}
 li.dupl .li-main{display:flex;flex-direction:column;min-width:0;flex:1}
 li.dupl .btn{flex:none}
+.divgrid{display:grid;grid-template-columns:1fr;gap:10px}
+@media (min-width:640px){.divgrid{grid-template-columns:1fr 1fr}}
+.divp h3{margin:0 0 4px;font-size:1.05rem}
+.divp .list li,.card > .list.num li{display:flex;justify-content:space-between;gap:10px;padding:7px 0}
+.divp .list li.tot{font-weight:700;border-top:1px solid var(--line)}
+.divp b.neg{color:var(--danger)} .divp b.pos{color:var(--save)}
+.acerto{background:var(--surface2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.acerto .big{font-size:1.3rem;font-weight:700}
 .steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .tips{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:.93rem}
 
 #fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:6;border:none;border-radius:999px;padding:14px 20px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:1rem;box-shadow:0 6px 18px rgba(0,0,0,.22)}
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:4px max(6px,env(safe-area-inset-right,0px)) calc(4px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);padding:4px max(6px,env(safe-area-inset-right,0px)) calc(4px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
 nav.tabs button{border:none;background:none;padding:8px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.72rem;color:var(--muted);border-radius:10px}
 nav.tabs button svg{width:24px;height:24px}
 nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:700}
@@ -207,6 +215,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 <nav class="tabs" aria-label="Abas">
   <button type="button" data-tab="mes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>Mês</button>
   <button type="button" data-tab="graficos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Gráficos</button>
+  <button type="button" data-tab="divisao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 21h10M4 7h16"/><path d="M4 7l-2.5 6a2.5 2.5 0 0 0 5 0z"/><path d="M20 7l-2.5 6a2.5 2.5 0 0 0 5 0z"/></svg>Divisão</button>
   <button type="button" data-tab="fixas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M17 15.5l2 2 3-3.5"/></svg>Fixas</button>
   <button type="button" data-tab="planejar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V11M10 19V6M16 19v-5M21 19H3"/><path d="M14 8l3-3 3 3"/></svg>Planejar</button>
   <button type="button" data-tab="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
