@@ -248,8 +248,39 @@ function telaDivisao() {
   const so = [...d.itensSo.a.map(i => [i, "a"]), ...d.itensSo.b.map(i => [i, "b"])];
   h += `<details class="dobra"><summary><span>Gastos individuais (não divididos)</span><b class="num">${R(d.so.a + d.so.b)}</b></summary><ul class="list">` +
     (so.length ? so.map(([i, p]) => li(esc(i.desc), R(i.valor), { act: i.k === "fixa" ? `data-act="fixa-mes" data-id="${i.rec.id}" data-mes="${i.mesRef}"` : `data-act="edit" data-id="${i.rec.id}"`, sub: "só " + esc(nomeP(p)) + " · " + esc(i.cat || "") })).join("")
-      : `<li><span class="small muted">Nenhum. Para marcar um gasto ou conta como só de um de vocês, abra o lançamento e mude "Dividir".</span></li>`) + `</ul></details>`;
+      : `<li><span class="small muted">Nenhum. Para marcar um gasto ou conta como só de um de vocês, use a aba Separar.</span></li>`) + `</ul></details>`;
   h += `<p class="small muted" style="padding:0 4px">Entram aqui todas as contas fixas, as faturas que vencem no mês e os gastos no Pix/débito. O dinheiro guardado não entra. Quem paga: o cartão conta para o dono do cartão; Pix e débito, para quem lançou.</p>`;
+  return h;
+}
+
+// ---------- aba Separar: cada lançamento é da casa ou só de um ----------
+const ratDe = rec => rec.rateio === "a" || rec.rateio === "b" ? rec.rateio : "casal";
+function linhaSep(i) {
+  const r = ratDe(i.rec), act = i.k === "fixa" ? `data-act="edit" data-id="${i.rec.id}"` : `data-act="edit" data-id="${i.rec.id}"`;
+  const sub = (i.k === "fixa" ? "conta fixa · vale todo mês" : dataBR(i.data)) + (i.parcela ? " · parcela " + i.parcela : "") + " · " + esc(i.cat || "Outros");
+  const base = li(esc(i.desc), (i.est ? "≈ " : "") + R(i.valor), { act, sub });
+  const pb = (v, t) => `<button type="button" class="pill${r === v ? " on" : ""}" data-act="rateio" data-id="${i.rec.id}" data-v="${v}" aria-pressed="${r === v}">${t}</button>`;
+  return base.replace(/^<li>/, `<li class="fx${r !== "casal" ? " so" : ""}"><div class="fx-top">`).replace(/<\/li>$/, `</div><div class="quem">${pb("casal", "🏠 Casa")}${pb("a", "Só " + esc(nomeP("a")))}${pb("b", "Só " + esc(nomeP("b")))}</div></li>`);
+}
+function telaSeparar() {
+  const m = mesSel, its = itensMes(m).filter(i => i.valor > 0);
+  let h = mesbar(m);
+  const tot = { casal: 0, a: 0, b: 0 };
+  for (const i of its) tot[ratDe(i.rec)] += i.valor;
+  h += `<section class="simples num">
+    <div class="srow"><span class="sic">🏠</span><div class="st"><b>Da casa</b><small>dividido pela renda de cada um</small></div><b class="sv">${R0(tot.casal)}</b></div>
+    <div class="srow"><span class="sic">🙋‍♂️</span><div class="st"><b>Só ${esc(nomeP("a"))}</b><small>sai só do dinheiro dele</small></div><b class="sv">${R0(tot.a)}</b></div>
+    <div class="srow"><span class="sic">🙋‍♀️</span><div class="st"><b>Só ${esc(nomeP("b"))}</b><small>sai só do dinheiro dela</small></div><b class="sv">${R0(tot.b)}</b></div>
+    <span class="small muted">Toque em <b>Casa</b>, <b>Só ${esc(nomeP("a"))}</b> ou <b>Só ${esc(nomeP("b"))}</b> em cada lançamento. A aba Divisão recalcula na hora.</span></section>`;
+  if (!its.length) return h + `<div class="card"><span class="empty">Nenhum lançamento neste mês.</span></div>`;
+  const grupo = (tit, dica, lst) => lst.length ? `<section><h2>${tit} <small class="num">${R0(soma(lst))}</small></h2>${dica ? `<span class="small muted">${dica}</span>` : ""}<div class="card flat"><ul class="list">${lst.map(linhaSep).join("")}</ul></div></section>` : "";
+  const ord = (a, b) => (b.data || "").localeCompare(a.data || "");
+  const fixas = its.filter(i => i.k === "fixa").sort((a, b) => a.desc.localeCompare(b.desc));
+  h += grupo("Contas fixas", "Mudar aqui vale para todos os meses dessa conta.", fixas);
+  const porC = {};
+  for (const i of its.filter(i => i.k === "gasto" && i.forma === "credito")) (porC[i.cartao] ||= []).push(i);
+  for (const [cid, lst] of Object.entries(porC)) h += grupo("💳 " + esc(nomeCartao(cid)), "Compras e parcelas da fatura que vence neste mês. Numa compra parcelada, vale para todas as parcelas.", lst.sort(ord));
+  h += grupo("Pix e débito", "", its.filter(i => i.k === "gasto" && i.forma !== "credito").sort(ord));
   return h;
 }
 
@@ -271,7 +302,7 @@ function render() {
   const abaNav = SUB_MAIS.includes(aba) ? "mais" : aba;
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === abaNav ? "page" : "false"));
   $("fab").hidden = !(aba === "inicio" || aba === "mes" || aba === "fixas");
-  const tela = { inicio: telaInicio, mes: telaMes, mais: telaMais, graficos: telaGraficos, divisao: telaDivisao, fixas: telaFixas, planejar: telaPlanejar, ajustes: telaAjustes }[aba] || telaInicio;
+  const tela = { inicio: telaInicio, mes: telaMes, separar: telaSeparar, mais: telaMais, graficos: telaGraficos, divisao: telaDivisao, fixas: telaFixas, planejar: telaPlanejar, ajustes: telaAjustes }[aba] || telaInicio;
   const html = (SUB_MAIS.includes(aba) ? voltarMais() : "") + tela();
   $("main").innerHTML = html;
   renderSync();
@@ -788,7 +819,7 @@ function telaAjustes() {
   h += `<section><h2>Cópias e planilha</h2><div class="card">
     <div class="row"><button class="btn" data-act="csv">Baixar planilha (Excel)</button><button class="btn" data-act="backup">Baixar cópia completa</button></div>
     <label class="field"><span class="label">Restaurar cópia (junta com o que já está aqui)</span><input type="file" accept=".json,application/json" data-chg="restaurar"></label></div></section>
-    <p class="small muted" style="text-align:center">Finanças da Casa · versão 26 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
+    <p class="small muted" style="text-align:center">Finanças da Casa · versão 27 · ${window.FIN.DEMO ? "modo demonstração" : "dados no seu Google Drive"}</p>`;
   return h;
 }
 
@@ -1154,6 +1185,7 @@ $("main").addEventListener("click", async e => {
   const a = b.dataset.act, id = b.dataset.id;
   if (a === "mes") { mesSel = addMes(mesSel, +b.dataset.d); render(); }
   else if (a === "varia") { const f = reg[id]; if (vivo(f)) { gravar({ ...f, varia: b.dataset.v === "1" }); toast(b.dataset.v === "1" ? `"${f.desc}": valor muda todo mês (fica como média).` : `"${f.desc}": valor sempre igual.`); } }
+  else if (a === "rateio") { const x = reg[id]; if (vivo(x)) { const v = b.dataset.v; gravar({ ...x, rateio: v === "a" || v === "b" ? v : "" }); toast(`"${x.desc}": ${v === "a" || v === "b" ? "só " + nomeP(v) : "da casa"}.`); } }
   else if (a === "pagador") { const f = reg[id]; if (vivo(f)) { gravar({ ...f, pagador: b.dataset.p }); toast(`"${f.desc}" fica com ${nomeP(b.dataset.p)}.`); } }
   else if (a === "dup-apagar") { const x = reg[id]; apagar(id); toast(`"${x ? x.desc : "Lançamento"}" apagado.`); }
   else if (a === "dup-ok") { const k = parDup(b.dataset.a, b.dataset.b); gravar({ id: k, tipo: "dupOk" }); toast("Certo, não vou mais avisar sobre esses dois."); }
